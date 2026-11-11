@@ -125,6 +125,26 @@ VPS: 2 vCPU AMD EPYC Genoa, 3,9 GB RAM, Debian 13 · EI mit `nice 10`, voidlog l
 
 ---
 
+## 2a. Ergebnis des In-process-Spikes (2026-11-11, Desktop)
+
+`tools/Breakbar.ParseSpike` mit den 13 Benchmark-Logs, 2 Runden, ein Prozess, single-threaded:
+
+| | Summe Parse-Zeit 13 Logs | Kommentar |
+|---|---|---|
+| EI-CLI, ein Prozess pro Log (Batch B) | ~51 s (inkl. Prozessstart) | Benchmark 1c |
+| In-process, Runde 1 (kalt) | ~24 s | Skill-Cache und HTML-Vorlagen nur einmal geladen (Start des Adapters: ~0,3 s) |
+| **In-process, Runde 2 (warm)** | **~16 s** | JIT fertig, ~3× schneller als die CLI |
+
+Auf dem VPS ist entsprechend mit deutlich mehr als den gemessenen ~1070 Logs/Stunde zu rechnen (noch nicht gemessen).
+
+Weitere Erkenntnisse:
+- Ausgabe identisch zur CLI: HTML bindet EIs JS/CSS über die konfigurierte URL ein (`EliteInsights-<version>.js` usw. landen einmalig im Assets-Ordner), JSON wird als gzip geschrieben.
+- **Speicher:** Der Prozess gibt RAM nach großen Logs nicht sofort zurück (Peak Working Set nach 13 Logs ~1,15 GB bei sequenzieller Verarbeitung). Für den Dienst vorsehen: `GCHeapHardLimit`/Container-Limit, ggf. `GCConserveMemory` und nach sehr großen Logs ein gezieltes `GC.Collect` mit LOH-Kompaktierung. Im VPS-Betrieb messen.
+- `LogName` kommt aus dem Log selbst (Spielclient-Sprache, z. B. „Gorseval der Facettenreiche“); für stabile Bezeichner `EncounterId` (z. B. `gors`) verwenden.
+- **Datenschutz:** Die EI-HTML lädt Bibliotheken von Drittanbietern (cdnjs, jsdelivr, code.jquery.com, cdn.plot.ly) und **Google Fonts**. Für einen öffentlichen Dienst in Deutschland später prüfen, diese Dateien selbst zu hosten (HTML-Nachbearbeitung im Adapter, URLs ersetzen).
+
+---
+
 ## 3. Fair Queue pro User – das Pattern
 
 **Ja, das ist ein bekanntes Pattern:** *Fair Queuing* über Mandanten/User („noisy neighbor“-Problem), konkret **Round-Robin über per-User-Queues** bzw. die gewichtete Variante **Deficit Round Robin / Weighted Fair Queuing**. Die gewünschte Eigenschaft „ein einzelner User bekommt alle Worker“ heißt **work-conserving**: ungenutzte Anteile werden an die aktiven User umverteilt. So arbeiten u. a. Temporal (Fairness Keys, weighted round-robin), Amazon SQS Fair Queues und BullMQ-Groups.
@@ -373,16 +393,16 @@ import /srv/breakbar-logs/deploy/logs.caddy
 
 ## 7. Umsetzungs-Schritte
 
-| # | Schritt | Ergebnis |
-|---|---|---|
-| **0** | **Benchmark** – vorbereitet in [benchmark/](../benchmark/README.md) (`run-bench.ps1` für Windows, `run-bench.sh` für den VPS). Lokal (EI installieren): 5–10 typische Logs (Raid-Boss, Strike, Fractal, großer WvW-Log) mit EI-CLI parsen, Zeit + Peak-RAM messen, mit `SingleThreaded` an/aus. Danach **einmal auf dem VPS** mit der Linux-CLI wiederholen (`/usr/bin/time -v`) und `docker stats` von voidlog festhalten | Bestätigt das RAM-Budget (~2 GB) und `N = 1`, ermittelt Logs/Stunde |
-| 1 | Monorepo-Skelett, Submodule, Solution baut gegen EI-Projekte | `dotnet build` grün |
-| 2 | `EliteInsightsAdapter`: eine Datei → HTML + JSON (Konsolen-Spike) | Beweis: In-process funktioniert, gleiche Ausgabe wie CLI |
-| 3 | FairScheduler + Worker + Tests (Fairness, work-conserving, Cancel) | Kern-Logik abgesichert |
-| 4 | API: Upload, Dedupe, Jobs in SQLite, SSE-Status, Report-Auslieferung | End-to-End per curl |
-| 5 | Frontend: Multi-Upload mit Fortschritt, Batch-Ansicht, Links | nutzbares MVP |
-| 6 | Deploy: Dockerfile, Caddy, Volumes, Retention-Job, Rate-Limits | läuft auf dem VPS |
-| 7 | Feinschliff: RAM-Schätzung aus echten Messwerten nachjustieren, DRR-Gewichtung, Metriken (`/health`, Queue-Länge) | Optimierung nach Messwerten |
+| # | Schritt | Ergebnis | Status |
+|---|---|---|---|
+| **0** | **Benchmark** in [benchmark/](../benchmark/README.md) (`run-bench.ps1` für Windows, `run-bench.sh` für den VPS) | 2 parallele Jobs, RAM-Formel, Logs/Stunde (Abschnitt 1c) | ✅ 2026-11-11 (WvW offen) |
+| 1 | Monorepo-Skelett, Submodule (v3.32.0.0), Solution baut gegen EI-Projekte | `dotnet build` grün, 0 Warnungen | ✅ 2026-11-11 |
+| 2 | `EliteInsightsAdapter`: eine Datei → HTML + JSON (`tools/Breakbar.ParseSpike`) + Tests | In-process funktioniert, siehe 2a | ✅ 2026-11-11 |
+| 3 | FairScheduler + Worker + Tests (Fairness, work-conserving, Cancel) | Kern-Logik abgesichert | offen |
+| 4 | API: Upload, Dedupe, Jobs in SQLite, SSE-Status, Report-Auslieferung | End-to-End per curl | offen |
+| 5 | Frontend: Multi-Upload mit Fortschritt, Batch-Ansicht, Links | nutzbares MVP | offen |
+| 6 | Deploy: Dockerfile, Caddy, Volumes, Retention-Job, Rate-Limits | läuft auf dem VPS | offen |
+| 7 | Feinschliff: RAM-Schätzung aus echten Messwerten nachjustieren, DRR-Gewichtung, Metriken (`/health`, Queue-Länge) | Optimierung nach Messwerten | offen |
 
 ---
 
