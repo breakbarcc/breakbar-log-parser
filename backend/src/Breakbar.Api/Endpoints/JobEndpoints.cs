@@ -37,7 +37,7 @@ public static class JobEndpoints
             })
             .RequireRateLimiting(UploadRateLimitPolicy);
 
-        api.MapGet("/jobs", (HttpContext context, string? batch, UserIdentity identity, JobStore store, FairParseQueue queue) =>
+        api.MapGet("/jobs", (HttpContext context, string? batch, UserIdentity identity, JobStore store, FairParseQueue queue, ReportsOptions reports) =>
         {
             if (identity.Resolve(context) is not { } userId)
             {
@@ -45,11 +45,11 @@ public static class JobEndpoints
             }
             var positions = queue.GetPositions(userId);
             var jobs = store.ListForUser(userId, batch, limit: 500)
-                .Select(j => JobDto.From(j, positions.TryGetValue(Guid.ParseExact(j.Id, "N"), out int p) ? p : null));
+                .Select(j => JobDto.From(j, positions.TryGetValue(Guid.ParseExact(j.Id, "N"), out int p) ? p : null, reports));
             return Results.Ok(jobs);
         });
 
-        api.MapGet("/jobs/{id}", (HttpContext context, string id, UserIdentity identity, JobStore store, FairParseQueue queue) =>
+        api.MapGet("/jobs/{id}", (HttpContext context, string id, UserIdentity identity, JobStore store, FairParseQueue queue, ReportsOptions reports) =>
         {
             if (identity.Resolve(context) is not { } userId)
             {
@@ -59,12 +59,12 @@ public static class JobEndpoints
             {
                 return Results.NotFound();
             }
-            return Results.Ok(JobDto.From(job, queue.GetPosition(jobId)));
+            return Results.Ok(JobDto.From(job, queue.GetPosition(jobId), reports));
         });
 
         // Cancels a job that has not started yet.
         api.MapDelete("/jobs/{id}", (HttpContext context, string id, UserIdentity identity, JobStore store,
-            FairParseQueue queue, JobEventHub hub) =>
+            FairParseQueue queue, JobEventHub hub, ReportsOptions reports) =>
         {
             if (identity.Resolve(context) is not { } userId)
             {
@@ -80,7 +80,7 @@ public static class JobEndpoints
             }
             store.MarkCancelled(id);
             File.Delete(job.UploadPath);
-            hub.PublishJob(userId, JobDto.From(store.GetView(id)!, null));
+            hub.PublishJob(userId, JobDto.From(store.GetView(id)!, null, reports));
             hub.PublishPositions();
             return Results.NoContent();
         });

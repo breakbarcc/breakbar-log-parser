@@ -1,3 +1,4 @@
+using Breakbar.Api.Options;
 using Breakbar.Api.Persistence;
 
 namespace Breakbar.Api.Jobs;
@@ -20,7 +21,7 @@ public sealed record JobDto(
     DateTimeOffset CreatedAt,
     DateTimeOffset? FinishedAt)
 {
-    public static JobDto From(JobView job, int? position)
+    public static JobDto From(JobView job, int? position, ReportsOptions reports)
     {
         bool done = job.Status == JobStatus.Done;
         return new JobDto(
@@ -30,8 +31,8 @@ public sealed record JobDto(
             job.Status == JobStatus.Queued ? position : null,
             job.BatchId,
             done ? job.ReportId : null,
-            done ? $"/r/{job.ReportId}" : null,
-            done ? $"/r/{job.ReportId}/json" : null,
+            done ? reports.ReportUrl(job.ReportId) : null,
+            done ? reports.ReportUrl(job.ReportId) + "/json" : null,
             job.EncounterId,
             job.LogName,
             job.EncounterSuccess,

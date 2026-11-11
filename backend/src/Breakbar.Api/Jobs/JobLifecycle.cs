@@ -15,6 +15,7 @@ public sealed partial class JobLifecycle(
     JobEventHub hub,
     EliteInsightsAdapter eliteInsights,
     StorageOptions storage,
+    ReportsOptions reports,
     ILogger<JobLifecycle> logger) : IParseJobObserver
 {
     public ValueTask OnStartedAsync(ParseJob job)
@@ -114,7 +115,7 @@ public sealed partial class JobLifecycle(
     {
         if (store.GetView(Key(job)) is { } view)
         {
-            hub.PublishJob(view.UserId, JobDto.From(view, queue.GetPosition(job.Id)));
+            hub.PublishJob(view.UserId, JobDto.From(view, queue.GetPosition(job.Id), reports));
         }
     }
 

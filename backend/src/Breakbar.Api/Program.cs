@@ -29,6 +29,8 @@ builder.Services.AddSingleton(eiOptions);
 builder.Services.AddSingleton(config.GetSection("Queue").Get<ParseQueueOptions>() ?? new ParseQueueOptions());
 builder.Services.AddSingleton(config.GetSection("Uploads").Get<UploadOptions>() ?? new UploadOptions());
 builder.Services.AddSingleton(config.GetSection("ServiceClients").Get<ServiceClientOptions>() ?? new ServiceClientOptions());
+var reports = config.GetSection("Reports").Get<ReportsOptions>() ?? new ReportsOptions();
+builder.Services.AddSingleton(reports);
 builder.Services.AddSingleton(TimeProvider.System);
 
 // ---- Services --------------------------------------------------------------------------------
@@ -74,9 +76,10 @@ if (recovered > 0)
 }
 
 app.UseForwardedHeaders();
+app.UseReportsOriginSeparation(reports);
 app.UseRateLimiter();
 
-// EI's JS/CSS for the reports. In production Caddy serves /ei-assets directly.
+// EI's JS/CSS for the reports (served on the reports origin).
 app.UseStaticFiles(new StaticFileOptions
 {
     FileProvider = new PhysicalFileProvider(storage.AssetsDirectory),

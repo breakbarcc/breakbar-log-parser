@@ -23,9 +23,18 @@ public sealed class UploadService(
     ParseQueueOptions queueOptions,
     JobEventHub hub,
     StorageOptions storage,
-    UploadOptions uploadOptions)
+    UploadOptions uploadOptions,
+    ReportsOptions reports)
 {
     private static readonly string[] SupportedExtensions = [".evtc.zip", ".zevtc", ".evtc"];
+
+    /// <summary>
+    /// Largest uncompressed EVTC worth accepting: the configured limit, capped by what the memory budget can parse
+    /// (≈ 53 MB with the default 2.4 GB limit and 150 MB + 42× estimate).
+    /// </summary>
+    private long MaxEvtcBytes => Math.Min(
+        uploadOptions.MaxEvtcBytes,
+        (long)((queueOptions.MaxJobMemoryBytes - queueOptions.EstimateBaseBytes) / queueOptions.EstimateBytesPerEvtcByte));
 
     public async Task<UploadOutcome> HandleAsync(string userId, string? fileName, string? batchId, Stream body, CancellationToken cancellationToken)
     {
@@ -38,6 +47,12 @@ public sealed class UploadService(
         if (batchId is not null && (batchId.Length > 64 || !batchId.All(c => char.IsAsciiLetterOrDigit(c) || c == '-')))
         {
             return UploadOutcome.Fail(StatusCodes.Status400BadRequest, "Invalid batch id.");
+        }
+
+        // Capacity checks before accepting any bytes: rotating cookies or IPs must not fill disk or memory.
+        if (CheckCapacity(userId) is { } refused)
+        {
+            return refused;
         }
 
         var jobId = Guid.NewGuid();
@@ -55,15 +70,15 @@ public sealed class UploadService(
             long evtcBytes;
             try
             {
-                evtcBytes = ReadEvtcSize(uploadPath);
+                evtcBytes = InspectEvtc(uploadPath, MaxEvtcBytes);
+            }
+            catch (LogTooLargeException)
+            {
+                return UploadOutcome.Fail(StatusCodes.Status413PayloadTooLarge, "Log is too large for this server.");
             }
             catch (InvalidDataException ex)
             {
                 return UploadOutcome.Fail(StatusCodes.Status422UnprocessableEntity, "Not a valid arcdps log: " + ex.Message);
-            }
-            if (evtcBytes > uploadOptions.MaxEvtcBytes)
-            {
-                return UploadOutcome.Fail(StatusCodes.Status413PayloadTooLarge, "Log is too large to process.");
             }
 
             long now = store.Now();
@@ -73,7 +88,7 @@ public sealed class UploadService(
             {
                 store.Insert(NewJob(jobId, userId, batchId, name, uploadPath: "", sha256, fileBytes, evtcBytes, 0, JobStatus.Done, existing.Id, now) with { FinishedAt = now });
                 var doneView = store.GetView(jobId.ToString("N"))!;
-                var doneDto = JobDto.From(doneView, null);
+                var doneDto = JobDto.From(doneView, null, reports);
                 hub.PublishJob(userId, doneDto);
                 return new UploadOutcome(StatusCodes.Status200OK, doneDto, null);
             }
@@ -90,11 +105,11 @@ public sealed class UploadService(
 
             // Publish "queued" before enqueueing: a free worker may start the job immediately, and its
             // "running" event must not overtake this one.
-            hub.PublishJob(userId, JobDto.From(store.GetView(jobId.ToString("N"))!, null));
+            hub.PublishJob(userId, JobDto.From(store.GetView(jobId.ToString("N"))!, null, reports));
             queue.Enqueue(new ParseJob(jobId, userId, uploadPath, Path.GetFullPath(storage.ReportDirectory(reportId)), estimate));
             hub.PublishPositions();
 
-            var dto = JobDto.From(store.GetView(jobId.ToString("N"))!, queue.GetPosition(jobId));
+            var dto = JobDto.From(store.GetView(jobId.ToString("N"))!, queue.GetPosition(jobId), reports);
             return new UploadOutcome(StatusCodes.Status202Accepted, dto, null);
         }
         finally
@@ -151,19 +166,89 @@ public sealed class UploadService(
         return (total, Convert.ToHexStringLower(hash.GetHashAndReset()));
     }
 
-    /// <summary>Uncompressed EVTC size; checks the "EVTC" magic bytes of plain logs and the zip structure of compressed ones.</summary>
-    private static long ReadEvtcSize(string path)
+    private UploadOutcome? CheckCapacity(string userId)
+    {
+        if (!Identity.UserIdentity.IsServiceClient(userId) && queue.GetQueuedCount(userId) >= uploadOptions.MaxQueuedJobsPerUser)
+        {
+            return UploadOutcome.Fail(StatusCodes.Status429TooManyRequests,
+                $"You already have {uploadOptions.MaxQueuedJobsPerUser} logs waiting. Please upload more once some are done.");
+        }
+        if (queue.GetStats().Queued >= uploadOptions.MaxQueuedJobsTotal)
+        {
+            return UploadOutcome.Fail(StatusCodes.Status503ServiceUnavailable, "The server is busy, please try again later.");
+        }
+        Directory.CreateDirectory(storage.DataDirectory);
+        if (new DriveInfo(Path.GetFullPath(storage.DataDirectory)).AvailableFreeSpace < uploadOptions.MinFreeDiskBytes)
+        {
+            return UploadOutcome.Fail(StatusCodes.Status503ServiceUnavailable, "The server is out of storage space, please try again later.");
+        }
+        return null;
+    }
+
+    /// <summary>
+    /// Verifies the log and returns its real uncompressed EVTC size. For zip archives the entry is fully decompressed
+    /// (with a hard limit): the size stored in the zip directory can be forged, and Elite Insights decompresses the
+    /// whole entry into memory, so a "zip bomb" would otherwise exhaust RAM.
+    /// </summary>
+    /// <exception cref="InvalidDataException">Not an EVTC log or a corrupt/forged archive.</exception>
+    /// <exception cref="LogTooLargeException">Uncompressed data exceeds <paramref name="maxBytes"/>.</exception>
+    private static long InspectEvtc(string path, long maxBytes)
     {
         if (path.EndsWith(".evtc", StringComparison.OrdinalIgnoreCase))
         {
-            Span<byte> magic = stackalloc byte[4];
             using var file = File.OpenRead(path);
-            if (file.ReadAtLeast(magic, 4, throwOnEndOfStream: false) < 4 || !magic.SequenceEqual("EVTC"u8))
-            {
-                throw new InvalidDataException("missing EVTC header.");
-            }
-            return file.Length;
+            RequireEvtcMagic(file);
+            return file.Length <= maxBytes ? file.Length : throw new LogTooLargeException();
         }
-        return ParseCostEstimator.GetUncompressedEvtcBytes(path);
+
+        using var archive = System.IO.Compression.ZipFile.OpenRead(path);
+        if (archive.Entries.Count != 1)
+        {
+            throw new InvalidDataException($"expected exactly one file in the archive, found {archive.Entries.Count}.");
+        }
+        var entry = archive.Entries[0];
+        if (entry.Length > maxBytes)
+        {
+            throw new LogTooLargeException();
+        }
+        // Deflate never grows data by more than ~0.03 %. A compressed size well above the declared uncompressed
+        // size means forged headers (.NET stops reading at the declared size, so this is the only visible trace).
+        if (entry.CompressedLength > entry.Length + (entry.Length / 100) + 1024)
+        {
+            throw new InvalidDataException("archive size information is inconsistent.");
+        }
+
+        using var data = entry.Open();
+        RequireEvtcMagic(data);
+        long total = 4;
+        byte[] buffer = ArrayPool<byte>.Shared.Rent(81920);
+        try
+        {
+            int read;
+            while ((read = data.Read(buffer, 0, buffer.Length)) > 0)
+            {
+                total += read;
+                if (total > maxBytes)
+                {
+                    throw new LogTooLargeException();
+                }
+            }
+        }
+        finally
+        {
+            ArrayPool<byte>.Shared.Return(buffer);
+        }
+        return total == entry.Length ? total : throw new InvalidDataException("archive size information does not match its content.");
     }
+
+    private static void RequireEvtcMagic(Stream stream)
+    {
+        Span<byte> magic = stackalloc byte[4];
+        if (stream.ReadAtLeast(magic, 4, throwOnEndOfStream: false) < 4 || !magic.SequenceEqual("EVTC"u8))
+        {
+            throw new InvalidDataException("missing EVTC header.");
+        }
+    }
+
+    private sealed class LogTooLargeException : Exception;
 }

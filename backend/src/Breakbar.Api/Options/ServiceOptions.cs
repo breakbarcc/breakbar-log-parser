@@ -26,6 +26,30 @@ public sealed class UploadOptions
 
     /// <summary>Uploads per minute and client IP; service clients are not limited.</summary>
     public int UploadsPerMinutePerIp { get; set; } = 120;
+
+    /// <summary>Waiting jobs per user (browser identity); service clients are not limited.</summary>
+    public int MaxQueuedJobsPerUser { get; set; } = 300;
+
+    /// <summary>Waiting jobs across all users; protects disk and memory when identities are rotated.</summary>
+    public int MaxQueuedJobsTotal { get; set; } = 3000;
+
+    /// <summary>Uploads are refused while less than this is free on the data disk.</summary>
+    public long MinFreeDiskBytes { get; set; } = 5L * 1024 * MB;
+}
+
+/// <summary>
+/// Reports are served from their own origin (e.g. https://reports.breakbar.cc) so that report pages, which run
+/// Elite Insights' and third-party JavaScript, cannot read the API with the visitor's cookie (docs/PLAN.md 4b).
+/// Without <see cref="BaseUrl"/> (local development) reports are served from the same origin.
+/// </summary>
+public sealed class ReportsOptions
+{
+    public string? BaseUrl { get; set; }
+
+    /// <summary>Host name of <see cref="BaseUrl"/>, or null when reports share the API origin.</summary>
+    public string? Host => string.IsNullOrWhiteSpace(BaseUrl) ? null : new Uri(BaseUrl).Host;
+
+    public string ReportUrl(string reportId) => $"{BaseUrl?.TrimEnd('/')}/r/{reportId}";
 }
 
 /// <summary>Trusted service clients (e.g. voidlog) authenticated by the X-Api-Key header. Key: client name, value: API key.</summary>

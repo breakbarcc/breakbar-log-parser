@@ -181,6 +181,15 @@ public sealed class FairParseQueue(ParseQueueOptions options)
         }
     }
 
+    /// <summary>Number of waiting (not yet started) jobs of one user.</summary>
+    public int GetQueuedCount(string userId)
+    {
+        lock (_lock)
+        {
+            return _jobsByUser.TryGetValue(userId, out var jobs) ? jobs.Count : 0;
+        }
+    }
+
     public QueueStats GetStats()
     {
         lock (_lock)
