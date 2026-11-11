@@ -11,8 +11,9 @@ TestResults/
 node_modules/
 dist/
 
-# Local runtime data
-data/
+# Runtime data (SQLite, uploads, reports). Explicit paths: a bare "data/" would also hide code folders named "Data" on Windows.
+/data/
+/backend/src/Breakbar.Api/data/
 *.db
 *.db-shm
 *.db-wal

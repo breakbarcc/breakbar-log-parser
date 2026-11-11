@@ -1,6 +1,6 @@
 using System.Buffers;
 using System.Security.Cryptography;
-using Breakbar.Api.Data;
+using Breakbar.Api.Persistence;
 using Breakbar.Api.Options;
 using Breakbar.Processing.Queue;
 

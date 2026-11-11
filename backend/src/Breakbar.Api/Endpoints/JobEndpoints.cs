@@ -1,6 +1,6 @@
 using System.Net.ServerSentEvents;
 using System.Runtime.CompilerServices;
-using Breakbar.Api.Data;
+using Breakbar.Api.Persistence;
 using Breakbar.Api.Identity;
 using Breakbar.Api.Jobs;
 using Breakbar.Api.Options;

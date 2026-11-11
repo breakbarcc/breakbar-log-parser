@@ -1,4 +1,4 @@
-using Breakbar.Api.Data;
+using Breakbar.Api.Persistence;
 
 namespace Breakbar.Api.Jobs;
 
