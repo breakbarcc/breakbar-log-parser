@@ -9,6 +9,9 @@ public static class JobStatus
     public const string Done = "done";
     public const string Failed = "failed";
     public const string Cancelled = "cancelled";
+
+    /// <summary>Was done, but the report has been deleted by retention.</summary>
+    public const string Expired = "expired";
 }
 
 /// <summary>Row of the jobs table. <see cref="ReportId"/> is reserved at upload and final once the job is done.</summary>
@@ -168,6 +171,60 @@ public sealed class JobStore(Database database, TimeProvider time)
             ON CONFLICT (sha256, anonymized) DO NOTHING
             """, report);
         return db.ExecuteScalar<string>("SELECT id FROM reports WHERE sha256 = @Sha256 AND anonymized = @Anonymized", report)!;
+    }
+
+    // ---- Retention ---------------------------------------------------------------------------
+
+    /// <summary>Disk space used by all stored reports (HTML + JSON) according to the database.</summary>
+    public long GetReportsBytes()
+    {
+        using var db = database.Open();
+        return db.ExecuteScalar<long>("SELECT COALESCE(SUM(html_bytes + json_bytes), 0) FROM reports");
+    }
+
+    public IReadOnlyList<ReportRecord> ListOldestReports(int limit)
+    {
+        using var db = database.Open();
+        return db.Query<ReportRecord>("SELECT * FROM reports ORDER BY created_at LIMIT @limit", new { limit }).AsList();
+    }
+
+    /// <summary>Reports older than the cutoff that no browser user (only service clients like voidlog) asked for.</summary>
+    public IReadOnlyList<ReportRecord> ListServiceOnlyReportsBefore(long cutoff)
+    {
+        using var db = database.Open();
+        return db.Query<ReportRecord>("""
+            SELECT r.* FROM reports r
+            WHERE r.created_at < @cutoff
+              AND NOT EXISTS (SELECT 1 FROM jobs j WHERE j.report_id = r.id AND j.user_id NOT LIKE 'svc:%')
+            """, new { cutoff }).AsList();
+    }
+
+    /// <summary>Removes a report row and marks the jobs that pointed to it as expired.</summary>
+    public void DeleteReport(string id)
+    {
+        using var db = database.Open();
+        using var transaction = db.BeginTransaction();
+        db.Execute("DELETE FROM reports WHERE id = @id", new { id }, transaction);
+        db.Execute("UPDATE jobs SET status = 'expired' WHERE report_id = @id AND status = 'done'", new { id }, transaction);
+        transaction.Commit();
+    }
+
+    /// <summary>Report ids that exist or are reserved by unfinished jobs (their directories must be kept).</summary>
+    public HashSet<string> ListLiveReportIds()
+    {
+        using var db = database.Open();
+        return db.Query<string>("""
+            SELECT id FROM reports
+            UNION SELECT report_id FROM jobs WHERE status IN ('queued', 'running')
+            """).ToHashSet(StringComparer.Ordinal);
+    }
+
+    /// <summary>Upload files still needed by unfinished jobs.</summary>
+    public HashSet<string> ListPendingUploadPaths()
+    {
+        using var db = database.Open();
+        return db.Query<string>("SELECT upload_path FROM jobs WHERE status IN ('queued', 'running')")
+            .ToHashSet(StringComparer.OrdinalIgnoreCase);
     }
 
     private void SetStatus(string id, string status, string? error = null, long? startedAt = null, long? finishedAt = null)

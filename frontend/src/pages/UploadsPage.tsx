@@ -16,6 +16,7 @@ const pill: Record<RowState, { label: string; className: string }> = {
   done: { label: 'Fertig', className: 'bg-accent-soft text-accent' },
   failed: { label: 'Fehler', className: 'bg-bad-soft text-bad' },
   cancelled: { label: 'Abgebrochen', className: 'bg-line text-faint' },
+  expired: { label: 'Abgelaufen', className: 'bg-line text-faint' },
 }
 
 // Table from md upwards; on phones every row becomes a stacked card.
@@ -90,6 +91,8 @@ function ResultCell({ row }: { row: Row }) {
         return job?.error ?? 'Verarbeitung fehlgeschlagen'
       case 'cancelled':
         return 'Abgebrochen'
+      case 'expired':
+        return 'Bericht wurde gelöscht (Speicherplatz). Lade den Log erneut hoch, um ihn neu zu erzeugen.'
       default:
         return null
     }
@@ -139,7 +142,7 @@ function ActionsCell({ row, copied, copy }: { row: Row; copied: string | null; c
       </div>
     )
   }
-  if (row.state === 'upload-error' || row.state === 'failed' || row.state === 'cancelled') {
+  if (row.state === 'upload-error' || row.state === 'failed' || row.state === 'cancelled' || row.state === 'expired') {
     return (
       <button type="button" className={textButton} onClick={() => dismiss(row)}>
         Entfernen

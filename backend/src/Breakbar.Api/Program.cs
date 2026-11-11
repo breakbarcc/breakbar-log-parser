@@ -46,6 +46,9 @@ builder.Services.AddSingleton<IParseJobObserver>(sp => sp.GetRequiredService<Job
 builder.Services.AddSingleton<UploadService>();
 builder.Services.AddSingleton<UserIdentity>();
 builder.Services.AddHostedService<ParseWorkerPool>();
+builder.Services.AddSingleton(config.GetSection("Retention").Get<RetentionOptions>() ?? new RetentionOptions());
+builder.Services.AddSingleton<RetentionService>();
+builder.Services.AddHostedService(sp => sp.GetRequiredService<RetentionService>());
 
 // Behind Caddy: take client IP and scheme (for the Secure cookie flag) from X-Forwarded-For/-Proto.
 // Only loopback proxies are trusted by default. In Docker, Caddy on the host connects through the bridge

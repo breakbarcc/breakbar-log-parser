@@ -1,6 +1,7 @@
 // Client for the breakbar API (docs/PLAN.md 4a). Same origin; the anonymous identity is an HttpOnly cookie.
 
-export type JobStatus = 'queued' | 'running' | 'done' | 'failed' | 'cancelled'
+/** expired: the report was deleted by retention (storage quota). */
+export type JobStatus = 'queued' | 'running' | 'done' | 'failed' | 'cancelled' | 'expired'
 
 export interface Job {
   id: string

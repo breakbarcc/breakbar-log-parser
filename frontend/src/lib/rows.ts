@@ -26,7 +26,7 @@ export interface Row {
   job?: Job
 }
 
-const statusRank: Record<JobStatus, number> = { queued: 0, running: 1, done: 2, failed: 2, cancelled: 2 }
+const statusRank: Record<JobStatus, number> = { queued: 0, running: 1, done: 2, failed: 2, cancelled: 2, expired: 3 }
 
 /**
  * Merges a job update into the list. Updates can arrive out of order (upload response vs. SSE),
@@ -72,7 +72,7 @@ export function summarize(rows: Row[]): Summary {
   for (const row of rows) {
     if (row.state === 'done') done++
     else if (row.state === 'failed' || row.state === 'upload-error') failed++
-    else if (row.state !== 'cancelled') working++
+    else if (row.state !== 'cancelled' && row.state !== 'expired') working++
   }
   return { total: rows.length, done, working, failed }
 }

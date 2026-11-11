@@ -52,6 +52,21 @@ public sealed class ReportsOptions
     public string ReportUrl(string reportId) => $"{BaseUrl?.TrimEnd('/')}/r/{reportId}";
 }
 
+/// <summary>How long reports are kept (docs/PLAN.md 6a). Checked by RetentionService.</summary>
+public sealed class RetentionOptions
+{
+    /// <summary>When reports use more than this, the oldest are deleted until 90 % of it is left.</summary>
+    public long MaxReportsBytes { get; set; } = 60L * 1024 * 1024 * 1024;
+
+    /// <summary>
+    /// Reports only service clients (voidlog) asked for are deleted after this many days:
+    /// voidlog stores the results itself. 0 disables it.
+    /// </summary>
+    public int ServiceClientReportDays { get; set; } = 7;
+
+    public TimeSpan Interval { get; set; } = TimeSpan.FromHours(1);
+}
+
 /// <summary>Trusted service clients (e.g. voidlog) authenticated by the X-Api-Key header. Key: client name, value: API key.</summary>
 public sealed class ServiceClientOptions
 {
