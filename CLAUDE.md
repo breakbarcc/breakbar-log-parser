@@ -15,7 +15,9 @@ Read [docs/PLAN.md](docs/PLAN.md) before larger changes; it records decisions an
 - HTML uses external EI assets (`HtmlExternalScripts`) served from a configurable base URL; never let EI write `file://` links.
 - Never edit files inside `external/` – EI is a pinned submodule. Workarounds belong in the adapter.
 - Parsing is scheduled only through `FairParseQueue` + `ParseWorkerPool` (`backend/src/Breakbar.Processing/Queue/`): round-robin per user, memory-aware admission, no overtaking of the head job. Do not start parses elsewhere.
-- Planned: SQLite, SSE, Caddy on the host serves reports and frontend from disk. No Redis, no Postgres, no extra containers unless PLAN.md is updated first.
+- API (`backend/src/Breakbar.Api/`, endpoints documented in PLAN.md 4a): raw-body uploads streamed to disk while hashing, SHA-256 dedupe, SQLite via Dapper with **all SQL in `Persistence/JobStore.cs`**, live status via SSE (`JobEventHub`), the API itself serves reports and EI assets; Caddy on the host only does TLS, compression and proxying.
+- No Redis, no Postgres, no extra containers unless PLAN.md is updated first.
+- Do not name code folders `data`/`Data`: runtime data lives in `data/` and is git-ignored (Windows paths are case-insensitive).
 
 ## Conventions
 - .NET 10, nullable enabled, warnings are errors (`backend/Directory.Build.props`).

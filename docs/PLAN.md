@@ -59,7 +59,7 @@ Daraus folgt:
 2. **Hartes Speicherlimit** für den Container (`mem_limit: 2.8g`), `GCHeapHardLimit` ≈ 2,4 GB und EI-`MemoryLimit` pro Parse. Passt ein Log auch allein nicht ins Budget, wird er sauber als „zu groß“ abgelehnt, statt den Server zu blockieren.
 3. **2–4 GB Swapfile** als Sicherheitsnetz gegen OOM-Kills (auf HDD langsam, nur Notfall).
 4. **Auch für voidlog `mem_limit` setzen**, sonst kann voidlog den Parser verdrängen und umgekehrt.
-5. **Caddy läuft bereits direkt auf dem Host** (belegt Port 80/443, kein Container) und wird mitgenutzt für `voidlog.breakbar.cc` → `127.0.0.1:4000` und **`logs.breakbar.cc`** → Frontend, Reports und Parser-API. Das neue Projekt nutzt **nicht** Port 4000.
+5. **Caddy läuft bereits direkt auf dem Host** (belegt Port 80/443, kein Container) und wird mitgenutzt für `voidlog.breakbar.cc` → `127.0.0.1:4000` und **`logs.breakbar.cc`** → Parser-Container `127.0.0.1:4100` (API, Reports, Frontend). Das neue Projekt nutzt **nicht** Port 4000.
 6. **Kein eigenes Postgres/Redis** – SQLite reicht und spart ~300 MB.
 7. HDD: Uploads direkt als Stream auf Disk, `.zevtc` nicht vorab entpacken (EI liest es selbst), pro Report nur **eine** vorkomprimierte Variante (gzip), SQLite im WAL-Modus.
 
@@ -213,15 +213,16 @@ Code: `backend/src/Breakbar.Processing/Queue/`.
 ## 4. Architektur
 
 ```
-Browser ──HTTPS──► Caddy (TLS, statische Dateien, Reports direkt von Disk, brotli/gzip)
+Browser ──HTTPS──► Caddy (TLS, zstd/gzip)
                      │
-                     └─/api──► ASP.NET Core (ein Prozess)
-                                 ├─ Upload-Endpoint (Streaming auf Disk, Validierung)
-                                 ├─ FairScheduler + N Worker  ──► EliteInsightsAdapter ──► GW2EI*-Libs
-                                 ├─ SSE-Endpoint (Live-Status je Batch)
-                                 ├─ SQLite (Jobs, Reports, Hashes)
-                                 └─ Cleanup-HostedService (Retention)
-Disk:  /data/uploads (temporär) · /data/reports/{id}/report.html.br|.gz, report.json.gz · /data/ei-assets (CDN-Scripts)
+                     └──► ASP.NET Core (ein Prozess, 127.0.0.1:4100)
+                                 ├─ POST /api/uploads (Streaming auf Disk + SHA-256, Validierung, Dedupe)
+                                 ├─ FairParseQueue + ParseWorkerPool ──► EliteInsightsAdapter ──► GW2EI*-Libs
+                                 ├─ GET /api/events (SSE: Status + Wartepositionen)
+                                 ├─ SQLite (Jobs, Reports)
+                                 ├─ /r/{id}, /ei-assets/*, Frontend (Dateien von Disk)
+                                 └─ Cleanup-HostedService (Retention, Schritt 6)
+Disk:  data/uploads (temporär) · data/reports/{id}/report.html, report.json.gz · data/ei-assets · data/breakbar.db
 ```
 
 ### Ablauf
@@ -229,8 +230,8 @@ Disk:  /data/uploads (temporär) · /data/reports/{id}/report.html.br|.gz, repor
 2. Backend streamt auf Disk, prüft Endung + Header (`.evtc` beginnt mit `EVTC`; `.zevtc` = Zip mit genau einem Eintrag, Größe beim Entpacken begrenzen → Zip-Bomb-Schutz).
 3. **SHA-256-Dedupe:** Gleicher Hash schon verarbeitet → sofort fertiges Ergebnis (kostet 0 CPU; häufig, weil Gruppenmitglieder denselben Log hochladen).
 4. Job in FairScheduler; Status via **SSE** an den Browser (leichter als WebSockets/SignalR).
-5. Worker parst, schreibt HTML + JSON, komprimiert vorab (nur gzip, schont HDD und CPU), löscht Upload.
-6. Report-URL `/r/{kurzId}` wird von Caddy direkt ausgeliefert (`precompressed`), das Backend ist nicht beteiligt.
+5. Worker parst, schreibt HTML (unkomprimiert) + JSON (gzip), löscht Upload.
+6. Report-URL `/r/{kurzId}` liefert die API als Datei von der Platte aus; Caddy komprimiert beim Ausliefern (siehe 6b).
 
 ### Performance-Hebel (nach Wirkung sortiert)
 1. In-process, warme Runtime (kein Spawn pro Log).
@@ -239,6 +240,31 @@ Disk:  /data/uploads (temporär) · /data/reports/{id}/report.html.br|.gz, repor
 4. `HtmlCompressJson`, `CompressRaw`, `IndentJSON=false`, vorkomprimierte Dateien.
 5. Nicht benötigte Teile deaktivierbar (z. B. `ParseCombatReplay` als Option), `DetailledWvW=false`, `SkipFailedTries` je nach Wunsch.
 6. .NET-Runtime: Workstation-GC oder Server-GC mit DATAS, `GCHeapHardLimit` passend zum VPS; ReadyToRun/Tiered-PGO für schnellen Start.
+
+---
+
+## 4a. API (Stand 2026-11-11)
+
+Code: `backend/src/Breakbar.Api/`. Alle Antworten JSON, Job-IDs 32 Hex-Zeichen, Report-IDs 10 Zeichen Base62.
+
+| Methode + Pfad | Zweck |
+|---|---|
+| `POST /api/uploads?name=<datei>&batch=<id>` | **Eine Datei als roher Body** (`application/octet-stream`, kein Multipart): wird beim Empfang direkt auf die Platte geschrieben und gleichzeitig gehasht (eine einzige Schreiboperation auf der HDD). Antwort `202` (eingereiht), `200` (gleiche Datei schon geparst → sofort `done`), `400` (Name/Endung), `413` (zu groß), `422` (kein gültiger Log), `429` (Rate-Limit). Mehrere Dateien = mehrere parallele Requests (Fortschritt pro Datei per XHR möglich). |
+| `GET /api/jobs?batch=<id>` | Jobs des aktuellen Users (neueste zuerst, max. 500), inkl. Warteposition |
+| `GET /api/jobs/{id}` | ein Job |
+| `DELETE /api/jobs/{id}` | wartenden Job abbrechen (`409`, wenn er schon läuft) |
+| `GET /api/events` | Server-Sent Events: `ready`, `job` (Statuswechsel), `positions` (Queue hat sich bewegt), `ping` (alle 20 s) |
+| `GET /api/health` | EI-Version und Queue-Kennzahlen |
+| `GET /r/{id}` | Report-HTML |
+| `GET /r/{id}/json` | EI-JSON (gzip, `Content-Encoding: gzip`) |
+| `GET /ei-assets/*` | JS/CSS von Elite Insights |
+
+- **Identität:** Browser bekommen ein anonymes Cookie `bb_uid` (128 Bit Zufall, HttpOnly, 1 Jahr). Dienste wie voidlog schicken `X-Api-Key` (Konfiguration `ServiceClients:ApiKeys:<name>`), werden zum User `svc:<name>`, sind vom Rate-Limit ausgenommen und bekommen eine eigene Fair-Queue-Spur.
+- **Rate-Limit:** 120 Uploads pro Minute und IP (`Uploads:UploadsPerMinutePerIp`); die Client-IP kommt hinter Caddy aus `X-Forwarded-For`.
+- **Dedupe:** SHA-256 der hochgeladenen Datei. Ist die Datei schon als Report vorhanden, gibt es keinen Parse. Laufen zwei identische Uploads gleichzeitig, wird beim Speichern der zweite Report verworfen und auf den ersten verwiesen.
+- **SQLite** (`data/breakbar.db`, WAL): Tabellen `jobs` und `reports`; alle SQL-Befehle in `Persistence/JobStore.cs` (Dapper). Beim Start werden Jobs mit Status `queued`/`running` wieder eingereiht.
+- **Status eines Jobs:** `queued` → `running` → `done` | `failed`, oder `cancelled`.
+- Noch nicht umgesetzt: Retention/Quota (Schritt 6), Admin-Seite, Abruf über vorsignierte R2-URLs für voidlog.
 
 ---
 
@@ -349,44 +375,21 @@ Caddy läuft als Systemdienst auf dem Host und macht TLS automatisch (Let's Encr
 - API-Container: `127.0.0.1:4100:8080` (nicht 4000, der gehört voidlog)
 - Basis-Image: `mcr.microsoft.com/dotnet/aspnet:10.0` (Debian, enthält **ICU**). EI setzt die Kultur `en-US` und braucht daher ICU; der Invariant-Globalization-Modus ist keine Option. Bei `-alpine`- oder `-chiseled`-Varianten nur die `-extra`-Variante bzw. mit `icu-libs` verwenden. (Gefunden beim VPS-Benchmark: ohne `libicu` bricht .NET sofort mit Exit-Code 134 ab.)
 - Zweiter Linux-Stolperstein aus dem Benchmark: EIs `GW2EIParserCommons` nutzt `System.Configuration`-Benutzereinstellungen (`Settings.Default.Upgrade()`). Fehlt `~/.local/share`, stürzt EI mit `ArgumentNullException (Parameter 'path')` ab. Im eigenen Dienst daher **EI-Settings selbst als Objekte bauen** (`ParserSettings`, `HTMLSettings`, `RawFormatSettings`) und `Properties.Settings`/`ProgramHelper` aus `GW2EIParserCommons` nicht verwenden; im Container zusätzlich ein beschreibbares `HOME` mit `.local/share` vorsehen.
-- Daten als **Bind-Mount** statt Named Volume, z. B. `/srv/breakbar-logs/data`, damit Caddy Reports und Frontend **direkt von der Platte** ausliefern kann. Der Benutzer `caddy` braucht Leserechte auf `reports/`, `ei-assets/` und `frontend/`.
+- Daten als **Bind-Mount** `/srv/breakbar-logs/data` → `/app/data` (SQLite, Uploads, Reports, EI-Assets).
+- **Geändert (Schritt 4):** Die API liefert Reports (`/r/{id}`, `/r/{id}/json`), EI-Assets (`/ei-assets/*`) und später das Frontend selbst aus; Caddy macht nur TLS, Komprimierung und Weiterleitung. Grund: ein Ort für alle Pfade, keine Leserechte für den Benutzer `caddy` auf dem Datenordner, gleiches Verhalten lokal und auf dem VPS. Kestrel liefert Dateien sehr effizient aus; HTML wird **unkomprimiert** gespeichert (gzip spart dort nur ~25 %) und von Caddy beim Ausliefern komprimiert, das JSON liegt bereits als gzip vor und wird mit `Content-Encoding: gzip` gesendet (Caddy komprimiert es nicht erneut).
 - Die Site-Konfiguration liegt im Repo (`deploy/logs.caddy`) und wird in `/etc/caddy/Caddyfile` mit `import /srv/breakbar-logs/deploy/logs.caddy` eingebunden. voidlogs Block bleibt unberührt.
 
 ```caddy
 logs.breakbar.cc {
     encode zstd gzip
 
-    # Upload- und Status-API → .NET-Container
-    handle /api/* {
-        request_body {
-            max_size 200MB
-        }
-        reverse_proxy 127.0.0.1:4100 {
-            flush_interval -1          # SSE sofort durchreichen
-        }
+    request_body {
+        max_size 200MB
     }
 
-    # Fertige Reports: vorkomprimiert von Disk, ohne Backend
-    handle_path /r/* {
-        root * /srv/breakbar-logs/data/reports
-        file_server {
-            precompressed gzip
-        }
-        header Cache-Control "public, max-age=31536000, immutable"
-    }
-
-    # EI-JS/CSS (HtmlExternalScriptsCdn zeigt hierhin), versioniert
-    handle_path /ei-assets/* {
-        root * /srv/breakbar-logs/data/ei-assets
-        file_server
-        header Cache-Control "public, max-age=31536000, immutable"
-    }
-
-    # React-Frontend (statischer Build, SPA-Fallback)
-    handle {
-        root * /srv/breakbar-logs/frontend
-        try_files {path} /index.html
-        file_server
+    # Alles an den .NET-Container: API, SSE, Reports, EI-Assets, Frontend
+    reverse_proxy 127.0.0.1:4100 {
+        flush_interval -1   # SSE (/api/events) sofort durchreichen
     }
 }
 ```
@@ -413,7 +416,7 @@ import /srv/breakbar-logs/deploy/logs.caddy
 | 1 | Monorepo-Skelett, Submodule (v3.32.0.0), Solution baut gegen EI-Projekte | `dotnet build` grün, 0 Warnungen | ✅ 2026-11-11 |
 | 2 | `EliteInsightsAdapter`: eine Datei → HTML + JSON (`tools/Breakbar.ParseSpike`) + Tests | In-process funktioniert, siehe 2a | ✅ 2026-11-11 |
 | 3 | FairScheduler + Worker + Tests (Fairness, work-conserving, Cancel) | `FairParseQueue`, `ParseCostEstimator`, `ParseWorkerPool`, 21 Tests; siehe 3a | ✅ 2026-11-11 |
-| 4 | API: Upload, Dedupe, Jobs in SQLite, SSE-Status, Report-Auslieferung | End-to-End per curl | offen |
+| 4 | API: Upload, Dedupe, Jobs in SQLite, SSE-Status, Report-Auslieferung | End-to-End per curl geprüft, 10 Integrationstests; siehe 4a | ✅ 2026-11-11 |
 | 5 | Frontend: Multi-Upload mit Fortschritt, Batch-Ansicht, Links | nutzbares MVP | offen |
 | 6 | Deploy: Dockerfile, Caddy, Volumes, Retention-Job, Rate-Limits | läuft auf dem VPS | offen |
 | 7 | Feinschliff: RAM-Schätzung aus echten Messwerten nachjustieren, DRR-Gewichtung, Metriken (`/health`, Queue-Länge) | Optimierung nach Messwerten | offen |

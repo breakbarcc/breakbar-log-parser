@@ -2,7 +2,7 @@
 
 Self-hosted service for parsing Guild Wars 2 arcdps logs (`.evtc`, `.zevtc`) with [Elite Insights](https://github.com/baaron4/GW2-Elite-Insights-Parser) (EI) into HTML reports and JSON. Planned public instance: `logs.breakbar.cc`; it will also serve as the parsing backend for [voidlog](https://github.com/breakbarcc/voidlog).
 
-Status: **early skeleton** – EI runs in-process and produces reports; upload, fair queue, storage and frontend are not built yet. See [docs/PLAN.md](docs/PLAN.md) for architecture, decisions and benchmark results.
+Status: **backend works end-to-end** – upload API, fair per-user queue, in-process EI parsing, SQLite, live status via SSE and report delivery. Frontend and deployment are not built yet. See [docs/PLAN.md](docs/PLAN.md) for architecture, decisions, API reference (section 4a) and benchmark results.
 
 ## Repository layout
 
@@ -10,7 +10,8 @@ Status: **early skeleton** – EI runs in-process and produces reports; upload, 
 |---|---|
 | `backend/` | .NET 10 solution `Breakbar.slnx` |
 | `backend/src/Breakbar.Processing/` | `EliteInsightsAdapter` – the only code that talks to EI |
-| `backend/src/Breakbar.Api/` | ASP.NET Core API (currently only `/api/health`) |
+| `backend/src/Breakbar.Processing/Queue/` | fair per-user queue and worker pool |
+| `backend/src/Breakbar.Api/` | ASP.NET Core API: uploads, jobs, SSE, reports, SQLite |
 | `backend/tools/Breakbar.ParseSpike/` | console tool: parse logs in-process, print time and memory |
 | `backend/tests/` | xUnit v3 tests |
 | `external/GW2-Elite-Insights-Parser/` | EI as git submodule, pinned to a release tag |
@@ -36,11 +37,21 @@ Parse logs in-process:
 dotnet run --project tools/Breakbar.ParseSpike -c Release -- ../benchmark/logs --rounds 2
 ```
 
-Run the API (http://localhost:5080/api/health):
+Run the API (http://localhost:5080/api/health; data goes to `src/Breakbar.Api/data/`):
 
 ```bash
 dotnet run --project src/Breakbar.Api
 ```
+
+Upload a log and follow it (the cookie jar keeps your anonymous identity):
+
+```bash
+curl -c jar -b jar -X POST --data-binary @fight.zevtc "http://localhost:5080/api/uploads?name=fight.zevtc"
+curl -b jar http://localhost:5080/api/jobs
+curl -N -b jar http://localhost:5080/api/events
+```
+
+Finished reports are at `/r/<reportId>` (HTML) and `/r/<reportId>/json` (EI JSON).
 
 ## Updating Elite Insights
 
