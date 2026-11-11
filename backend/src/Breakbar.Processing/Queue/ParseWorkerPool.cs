@@ -60,7 +60,7 @@ public sealed partial class ParseWorkerPool(
             await observer.OnStartedAsync(job).ConfigureAwait(false);
             LogJobStarted(workerId, job.Id, job.UserId, job.EstimatedMemoryBytes / (1024 * 1024));
 
-            var result = parser.Parse(job.LogPath, job.OutputDirectory, stoppingToken);
+            var result = parser.Parse(job.LogPath, job.OutputDirectory, job.AnonymizePlayers, stoppingToken);
 
             LogJobFinished(workerId, job.Id, result.Success, (long)result.Elapsed.TotalMilliseconds);
             await observer.OnCompletedAsync(job, result).ConfigureAwait(false);

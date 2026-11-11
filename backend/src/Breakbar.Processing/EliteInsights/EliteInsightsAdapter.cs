@@ -47,6 +47,11 @@ public sealed class EliteInsightsAdapter : IEliteInsightsParser
     /// Never throws for bad input; failures are returned in the result. Cancellation throws <see cref="OperationCanceledException"/>.
     /// </summary>
     public EliteInsightsResult Parse(string logPath, string outputDirectory, CancellationToken cancellationToken = default)
+        => Parse(logPath, outputDirectory, anonymizePlayers: false, cancellationToken);
+
+    /// <inheritdoc cref="Parse(string, string, CancellationToken)"/>
+    /// <param name="anonymizePlayers">Replace character and account names in the report.</param>
+    public EliteInsightsResult Parse(string logPath, string outputDirectory, bool anonymizePlayers, CancellationToken cancellationToken = default)
     {
         var stopwatch = Stopwatch.StartNew();
         var previousCulture = Thread.CurrentThread.CurrentCulture;
@@ -54,7 +59,7 @@ public sealed class EliteInsightsAdapter : IEliteInsightsParser
         try
         {
             var controller = new AdapterController(cancellationToken);
-            var parser = new EvtcParser(CreateParserSettings(), _apiController);
+            var parser = new EvtcParser(CreateParserSettings(anonymizePlayers), _apiController);
 
             // Benchmark: multi-threading inside one log gains nothing on the VPS -> always single-threaded.
             var log = parser.ParseLog(controller, new FileInfo(logPath), out var failure, multiThreadAcceleration: false);
@@ -110,9 +115,9 @@ public sealed class EliteInsightsAdapter : IEliteInsightsParser
         }
     }
 
-    private EvtcParserSettings CreateParserSettings() => new(_options.TooShortLimitMs, _options.TooBigLimitMb)
+    private EvtcParserSettings CreateParserSettings(bool anonymizePlayers) => new(_options.TooShortLimitMs, _options.TooBigLimitMb)
     {
-        AnonymousPlayers = false,
+        AnonymousPlayers = anonymizePlayers,
         SkipFailedTries = false,
         ComputePhases = true,
         ComputeCombatReplay = _options.ParseCombatReplay,

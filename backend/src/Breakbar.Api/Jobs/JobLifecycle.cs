@@ -40,6 +40,7 @@ public sealed partial class JobLifecycle(
             {
                 Id = record.ReportId,
                 Sha256 = record.Sha256,
+                Anonymized = record.Anonymized,
                 EncounterId = result.EncounterId,
                 LogName = result.LogName,
                 EncounterSuccess = result.EncounterSuccess,
@@ -98,7 +99,7 @@ public sealed partial class JobLifecycle(
             }
             store.MarkQueued(record.Id);
             string outputDirectory = Path.GetFullPath(storage.ReportDirectory(record.ReportId));
-            var job = new ParseJob(Guid.ParseExact(record.Id, "N"), record.UserId, record.UploadPath, outputDirectory, record.EstimateBytes);
+            var job = new ParseJob(Guid.ParseExact(record.Id, "N"), record.UserId, record.UploadPath, outputDirectory, record.EstimateBytes, record.Anonymized);
             if (queue.Enqueue(job) == EnqueueResult.Accepted)
             {
                 recovered++;

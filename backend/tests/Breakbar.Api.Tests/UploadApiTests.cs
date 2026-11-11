@@ -108,6 +108,36 @@ public sealed class UploadApiTests
     }
 
     [Fact]
+    public async Task Anonymized_upload_is_a_separate_report_without_player_names()
+    {
+        string log = TestLogs.RequireSmallest();
+        await using var factory = new ApiFactory();
+        var client = factory.CreateClient();
+
+        var plain = await client.WaitUntilFinishedAsync((await (await client.UploadAsync(log)).Content.ReadFromJsonAsync<JobDto>(Ct))!.Id);
+        var response = await client.PostAsync($"/api/uploads?name=anon.zevtc&anonymize=true", new StreamContent(File.OpenRead(log)), Ct);
+        Assert.Equal(HttpStatusCode.Accepted, response.StatusCode); // not answered from the plain report
+        var anonymized = await client.WaitUntilFinishedAsync((await response.Content.ReadFromJsonAsync<JobDto>(Ct))!.Id);
+
+        Assert.Equal("done", anonymized.Status);
+        Assert.True(anonymized.Anonymized);
+        Assert.False(plain.Anonymized);
+        Assert.NotEqual(plain.ReportId, anonymized.ReportId);
+
+        // EI's JSON lists players with their account names; anonymized reports replace them.
+        static async Task<HashSet<string>> Accounts(HttpClient c, string url)
+        {
+            var bytes = await c.GetByteArrayAsync(url, Ct);
+            using var gzip = new System.IO.Compression.GZipStream(new MemoryStream(bytes), System.IO.Compression.CompressionMode.Decompress);
+            using var json = System.Text.Json.JsonDocument.Parse(gzip);
+            return json.RootElement.GetProperty("players").EnumerateArray().Select(p => p.GetProperty("account").GetString()!).ToHashSet();
+        }
+        var plainAccounts = await Accounts(client, plain.JsonUrl!);
+        var anonymizedAccounts = await Accounts(client, anonymized.JsonUrl!);
+        Assert.Empty(plainAccounts.Intersect(anonymizedAccounts));
+    }
+
+    [Fact]
     public async Task Jobs_are_only_visible_to_their_owner()
     {
         string log = TestLogs.RequireSmallest();

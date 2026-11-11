@@ -38,10 +38,14 @@ public sealed class Database
     {
         using var connection = Open();
         connection.Execute("PRAGMA journal_mode = WAL;");
+        // Not deployed yet: the schema is edited in place. From the first deployment on, changes need
+        // migrations (PRAGMA user_version), see docs/PLAN.md 4a.
+        // A report is identified by file hash + options: the same log anonymized and not anonymized are two reports.
         connection.Execute("""
             CREATE TABLE IF NOT EXISTS reports (
                 id                TEXT PRIMARY KEY,
-                sha256            TEXT NOT NULL UNIQUE,
+                sha256            TEXT NOT NULL,
+                anonymized        INTEGER NOT NULL DEFAULT 0,
                 encounter_id      TEXT,
                 log_name          TEXT,
                 encounter_success INTEGER,
@@ -49,7 +53,8 @@ public sealed class Database
                 ei_version        TEXT NOT NULL,
                 html_bytes        INTEGER NOT NULL,
                 json_bytes        INTEGER NOT NULL,
-                created_at        INTEGER NOT NULL
+                created_at        INTEGER NOT NULL,
+                UNIQUE (sha256, anonymized)
             );
 
             CREATE TABLE IF NOT EXISTS jobs (
@@ -59,6 +64,7 @@ public sealed class Database
                 file_name      TEXT NOT NULL,
                 upload_path    TEXT NOT NULL,
                 sha256         TEXT NOT NULL,
+                anonymized     INTEGER NOT NULL DEFAULT 0,
                 file_bytes     INTEGER NOT NULL,
                 evtc_bytes     INTEGER NOT NULL,
                 estimate_bytes INTEGER NOT NULL,

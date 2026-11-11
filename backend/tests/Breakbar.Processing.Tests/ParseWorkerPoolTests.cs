@@ -106,7 +106,7 @@ public sealed class ParseWorkerPoolTests
 
     private sealed class FakeParser(Func<string, CancellationToken, EliteInsightsResult> parse) : IEliteInsightsParser
     {
-        public EliteInsightsResult Parse(string logPath, string outputDirectory, CancellationToken cancellationToken = default)
+        public EliteInsightsResult Parse(string logPath, string outputDirectory, bool anonymizePlayers, CancellationToken cancellationToken = default)
             => parse(logPath, cancellationToken);
     }
 

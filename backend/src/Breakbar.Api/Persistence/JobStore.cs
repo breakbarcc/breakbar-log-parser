@@ -20,6 +20,7 @@ public sealed record JobRecord
     public required string FileName { get; init; }
     public required string UploadPath { get; init; }
     public required string Sha256 { get; init; }
+    public bool Anonymized { get; init; }
     public long FileBytes { get; init; }
     public long EvtcBytes { get; init; }
     public long EstimateBytes { get; init; }
@@ -35,6 +36,7 @@ public sealed class ReportRecord
 {
     public required string Id { get; init; }
     public required string Sha256 { get; init; }
+    public bool Anonymized { get; init; }
     public string? EncounterId { get; init; }
     public string? LogName { get; init; }
     public bool? EncounterSuccess { get; init; }
@@ -54,6 +56,7 @@ public sealed class JobView
     public required string FileName { get; init; }
     public required string Status { get; init; }
     public required string ReportId { get; init; }
+    public bool Anonymized { get; init; }
     public string? Error { get; init; }
     public long CreatedAt { get; init; }
     public long? StartedAt { get; init; }
@@ -69,7 +72,7 @@ public sealed class JobStore(Database database, TimeProvider time)
 {
     private const string ViewSelect = """
         SELECT j.id, j.user_id, j.batch_id, j.file_name, j.status, j.report_id, j.error,
-               j.created_at, j.started_at, j.finished_at,
+               j.anonymized, j.created_at, j.started_at, j.finished_at,
                r.encounter_id, r.log_name, r.encounter_success, r.duration_ms
         FROM jobs j
         LEFT JOIN reports r ON r.id = j.report_id AND j.status = 'done'
@@ -81,9 +84,9 @@ public sealed class JobStore(Database database, TimeProvider time)
     {
         using var db = database.Open();
         db.Execute("""
-            INSERT INTO jobs (id, user_id, batch_id, file_name, upload_path, sha256, file_bytes, evtc_bytes,
+            INSERT INTO jobs (id, user_id, batch_id, file_name, upload_path, sha256, anonymized, file_bytes, evtc_bytes,
                               estimate_bytes, status, report_id, error, created_at, started_at, finished_at)
-            VALUES (@Id, @UserId, @BatchId, @FileName, @UploadPath, @Sha256, @FileBytes, @EvtcBytes,
+            VALUES (@Id, @UserId, @BatchId, @FileName, @UploadPath, @Sha256, @Anonymized, @FileBytes, @EvtcBytes,
                     @EstimateBytes, @Status, @ReportId, @Error, @CreatedAt, @StartedAt, @FinishedAt)
             """, job);
     }
@@ -137,10 +140,10 @@ public sealed class JobStore(Database database, TimeProvider time)
 
     public void MarkCancelled(string id) => SetStatus(id, JobStatus.Cancelled, finishedAt: Now());
 
-    public ReportRecord? FindReportBySha(string sha256)
+    public ReportRecord? FindReport(string sha256, bool anonymized)
     {
         using var db = database.Open();
-        return db.QuerySingleOrDefault<ReportRecord>("SELECT * FROM reports WHERE sha256 = @sha256", new { sha256 });
+        return db.QuerySingleOrDefault<ReportRecord>("SELECT * FROM reports WHERE sha256 = @sha256 AND anonymized = @anonymized", new { sha256, anonymized });
     }
 
     public bool ReportExists(string id)
@@ -150,20 +153,20 @@ public sealed class JobStore(Database database, TimeProvider time)
     }
 
     /// <summary>
-    /// Stores the report unless one with the same file hash exists (two identical uploads parsed in parallel).
+    /// Stores the report unless one with the same file hash and options exists (two identical uploads parsed in parallel).
     /// Returns the id of the report that is now stored for this hash.
     /// </summary>
     public string InsertReportOrGetExisting(ReportRecord report)
     {
         using var db = database.Open();
         db.Execute("""
-            INSERT INTO reports (id, sha256, encounter_id, log_name, encounter_success, duration_ms,
+            INSERT INTO reports (id, sha256, anonymized, encounter_id, log_name, encounter_success, duration_ms,
                                  ei_version, html_bytes, json_bytes, created_at)
-            VALUES (@Id, @Sha256, @EncounterId, @LogName, @EncounterSuccess, @DurationMs,
+            VALUES (@Id, @Sha256, @Anonymized, @EncounterId, @LogName, @EncounterSuccess, @DurationMs,
                     @EiVersion, @HtmlBytes, @JsonBytes, @CreatedAt)
-            ON CONFLICT (sha256) DO NOTHING
+            ON CONFLICT (sha256, anonymized) DO NOTHING
             """, report);
-        return db.ExecuteScalar<string>("SELECT id FROM reports WHERE sha256 = @Sha256", report)!;
+        return db.ExecuteScalar<string>("SELECT id FROM reports WHERE sha256 = @Sha256 AND anonymized = @Anonymized", report)!;
     }
 
     private void SetStatus(string id, string status, string? error = null, long? startedAt = null, long? finishedAt = null)

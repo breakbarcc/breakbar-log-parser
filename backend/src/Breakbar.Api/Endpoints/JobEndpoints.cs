@@ -18,8 +18,8 @@ public static class JobEndpoints
     {
         var api = app.MapGroup("/api");
 
-        // Raw body upload, one file per request: POST /api/uploads?name=foo.zevtc&batch=<id>
-        api.MapPost("/uploads", async (HttpContext context, string? name, string? batch, UserIdentity identity,
+        // Raw body upload, one file per request: POST /api/uploads?name=foo.zevtc&batch=<id>&anonymize=true
+        api.MapPost("/uploads", async (HttpContext context, string? name, string? batch, bool? anonymize, UserIdentity identity,
                 UploadService uploads, UploadOptions options, CancellationToken ct) =>
             {
                 if (identity.Resolve(context) is not { } userId)
@@ -30,7 +30,7 @@ public static class JobEndpoints
                 {
                     sizeLimit.MaxRequestBodySize = options.MaxUploadBytes;
                 }
-                var outcome = await uploads.HandleAsync(userId, name, batch, context.Request.Body, ct);
+                var outcome = await uploads.HandleAsync(userId, name, batch, anonymize ?? false, context.Request.Body, ct);
                 return outcome.Job is not null
                     ? Results.Json(outcome.Job, statusCode: outcome.StatusCode)
                     : Results.Problem(statusCode: outcome.StatusCode, detail: outcome.Error);

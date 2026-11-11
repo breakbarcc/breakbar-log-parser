@@ -36,7 +36,7 @@ public sealed class UploadService(
         uploadOptions.MaxEvtcBytes,
         (long)((queueOptions.MaxJobMemoryBytes - queueOptions.EstimateBaseBytes) / queueOptions.EstimateBytesPerEvtcByte));
 
-    public async Task<UploadOutcome> HandleAsync(string userId, string? fileName, string? batchId, Stream body, CancellationToken cancellationToken)
+    public async Task<UploadOutcome> HandleAsync(string userId, string? fileName, string? batchId, bool anonymize, Stream body, CancellationToken cancellationToken)
     {
         string name = Path.GetFileName(fileName ?? "");
         string? extension = SupportedExtensions.FirstOrDefault(e => name.EndsWith(e, StringComparison.OrdinalIgnoreCase));
@@ -84,9 +84,9 @@ public sealed class UploadService(
             long now = store.Now();
 
             // Same file parsed before (e.g. several group members upload the same fight): no parse needed.
-            if (store.FindReportBySha(sha256) is { } existing)
+            if (store.FindReport(sha256, anonymize) is { } existing)
             {
-                store.Insert(NewJob(jobId, userId, batchId, name, uploadPath: "", sha256, fileBytes, evtcBytes, 0, JobStatus.Done, existing.Id, now) with { FinishedAt = now });
+                store.Insert(NewJob(jobId, userId, batchId, name, uploadPath: "", sha256, fileBytes, evtcBytes, 0, JobStatus.Done, existing.Id, now) with { FinishedAt = now, Anonymized = anonymize });
                 var doneView = store.GetView(jobId.ToString("N"))!;
                 var doneDto = JobDto.From(doneView, null, reports);
                 hub.PublishJob(userId, doneDto);
@@ -100,13 +100,13 @@ public sealed class UploadService(
             }
 
             string reportId = ShortId.New();
-            store.Insert(NewJob(jobId, userId, batchId, name, uploadPath, sha256, fileBytes, evtcBytes, estimate, JobStatus.Queued, reportId, now));
+            store.Insert(NewJob(jobId, userId, batchId, name, uploadPath, sha256, fileBytes, evtcBytes, estimate, JobStatus.Queued, reportId, now) with { Anonymized = anonymize });
             keepFile = true;
 
             // Publish "queued" before enqueueing: a free worker may start the job immediately, and its
             // "running" event must not overtake this one.
             hub.PublishJob(userId, JobDto.From(store.GetView(jobId.ToString("N"))!, null, reports));
-            queue.Enqueue(new ParseJob(jobId, userId, uploadPath, Path.GetFullPath(storage.ReportDirectory(reportId)), estimate));
+            queue.Enqueue(new ParseJob(jobId, userId, uploadPath, Path.GetFullPath(storage.ReportDirectory(reportId)), estimate, anonymize));
             hub.PublishPositions();
 
             var dto = JobDto.From(store.GetView(jobId.ToString("N"))!, queue.GetPosition(jobId), reports);
