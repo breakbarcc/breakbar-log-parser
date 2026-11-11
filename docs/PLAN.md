@@ -451,6 +451,18 @@ import /srv/breakbar-logs/deploy/logs.caddy
 
 Änderungen prüfen und ohne Downtime laden: `caddy validate --config /etc/caddy/Caddyfile` und danach `sudo systemctl reload caddy`.
 
+### Umsetzung (Stand 2026-11-11)
+
+Anleitung Schritt für Schritt: [deploy/README.md](../deploy/README.md).
+
+- **Image:** `Dockerfile` im Repo-Root, drei Stufen (Node baut das Frontend, .NET SDK baut die API, Laufzeit `aspnet:10.0` als Benutzer `app`, UID 1654). Healthcheck auf `/api/health`.
+- **CI/CD:** `.github/workflows/ci.yml` testet Frontend und Backend bei jedem Push/PR und veröffentlicht bei Pushes auf `main` das Image als `ghcr.io/breakbarcc/breakbar-log-parser:latest` (und `:sha-<commit>` für Rollbacks). Der VPS baut nicht selbst, er lädt nur das Image – kein Compiler-Lauf neben voidlog.
+- **Compose:** `deploy/docker-compose.yml` – Port nur auf `127.0.0.1:4100`, Bind-Mount `/srv/breakbar-logs/data`, `mem_limit: 2800m`, `cpus: 2`, `cpu_shares: 512` (voidlog hat bei Konkurrenz Vorrang), Log-Rotation. Secrets (API-Key für voidlog) in `deploy/.env`.
+- **Proxy-Header:** Caddy erreicht den Container über die Docker-Bridge, nicht über Loopback. `ForwardedHeaders__TrustAllProxies=true` im Image sorgt dafür, dass Client-IP (Rate-Limit) und HTTPS (Secure-Cookie) trotzdem ankommen. Sicher nur, weil der Port ausschließlich auf 127.0.0.1 veröffentlicht ist.
+- **Aufbewahrung:** `RetentionService` (stündlich): Berichte über 60 GB → älteste löschen bis 90 %, Berichte nur für voidlog nach 7 Tagen löschen, verwaiste Dateien entfernen. Jobs gelöschter Berichte stehen auf „Abgelaufen“.
+- **Datenbank:** Schema-Version 1 (`PRAGMA user_version`); spätere Änderungen nur noch als Migration in `Persistence/Database.cs`.
+- Der früher erwähnte beschreibbare `HOME`-Ordner ist nicht nötig, weil der Dienst `GW2EIParserCommons` nicht nutzt.
+
 ---
 
 ## 7. Umsetzungs-Schritte
@@ -463,7 +475,7 @@ import /srv/breakbar-logs/deploy/logs.caddy
 | 3 | FairScheduler + Worker + Tests (Fairness, work-conserving, Cancel) | `FairParseQueue`, `ParseCostEstimator`, `ParseWorkerPool`, 21 Tests; siehe 3a | ✅ 2026-11-11 |
 | 4 | API: Upload, Dedupe, Jobs in SQLite, SSE-Status, Report-Auslieferung | End-to-End per curl geprüft, 10 Integrationstests; siehe 4a | ✅ 2026-11-11 |
 | 5 | Frontend: Multi-Upload mit Fortschritt, Batch-Ansicht, Links | `frontend/`, im Browser geprüft; siehe 5a | ✅ 2026-11-11 |
-| 6 | Deploy: Dockerfile, Caddy, Volumes, Retention-Job, Rate-Limits | läuft auf dem VPS | offen |
+| 6 | Deploy: Dockerfile, Caddy, Volumes, Retention-Job, Rate-Limits | vorbereitet (Image, CI, Compose, Caddy, Anleitung, Aufbewahrung); Ausrollen auf dem VPS offen | 🟡 2026-11-11 |
 | 7 | Feinschliff: RAM-Schätzung aus echten Messwerten nachjustieren, DRR-Gewichtung, Metriken (`/health`, Queue-Länge) | Optimierung nach Messwerten | offen |
 
 ---
