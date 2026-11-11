@@ -67,7 +67,7 @@ function ResultCell({ row }: { row: Row }) {
       <div className="flex flex-col gap-0.5">
         <span className="font-semibold">{job.logName ?? job.encounterId ?? 'Unbekannter Kampf'}</span>
         <span className="text-sm text-muted">
-          <span className={`font-semibold ${success ? 'text-ok' : 'text-bad'}`}>{success ? 'Erfolg' : 'Fehlschlag'}</span>
+          <span className={`font-semibold ${success ? 'text-ok' : 'text-bad'}`}>{success ? 'Kill' : 'Wipe'}</span>
           {job.durationMs != null && <> · {formatDuration(job.durationMs)}</>}
           {job.anonymized && <> · anonymisiert</>}
         </span>
