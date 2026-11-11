@@ -38,8 +38,10 @@ public sealed class Database
     {
         using var connection = Open();
         connection.Execute("PRAGMA journal_mode = WAL;");
-        // Not deployed yet: the schema is edited in place. From the first deployment on, changes need
-        // migrations (PRAGMA user_version), see docs/PLAN.md 4a.
+        // Schema version 1 (first deployment). Never edit the CREATE statements below for an existing table:
+        // add a migration step instead, e.g.
+        //   if (version < 2) { connection.Execute("ALTER TABLE jobs ADD COLUMN ..."); version = 2; }
+        // and bump CurrentSchemaVersion.
         // A report is identified by file hash + options: the same log anonymized and not anonymized are two reports.
         connection.Execute("""
             CREATE TABLE IF NOT EXISTS reports (
@@ -76,8 +78,21 @@ public sealed class Database
                 finished_at    INTEGER
             );
 
-            CREATE INDEX IF NOT EXISTS ix_jobs_user   ON jobs (user_id, created_at DESC);
-            CREATE INDEX IF NOT EXISTS ix_jobs_status ON jobs (status, created_at);
+            CREATE INDEX IF NOT EXISTS ix_jobs_user      ON jobs (user_id, created_at DESC);
+            CREATE INDEX IF NOT EXISTS ix_jobs_status    ON jobs (status, created_at);
+            CREATE INDEX IF NOT EXISTS ix_jobs_report    ON jobs (report_id);
+            CREATE INDEX IF NOT EXISTS ix_reports_created ON reports (created_at);
             """);
+
+        long version = connection.ExecuteScalar<long>("PRAGMA user_version");
+        if (version > CurrentSchemaVersion)
+        {
+            throw new InvalidOperationException(
+                $"Database schema version {version} is newer than this build supports ({CurrentSchemaVersion}). Deploy a newer version.");
+        }
+        // Migrations go here, oldest first (none yet).
+        connection.Execute($"PRAGMA user_version = {CurrentSchemaVersion}");
     }
+
+    public const int CurrentSchemaVersion = 1;
 }

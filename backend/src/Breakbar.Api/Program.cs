@@ -47,8 +47,19 @@ builder.Services.AddSingleton<UploadService>();
 builder.Services.AddSingleton<UserIdentity>();
 builder.Services.AddHostedService<ParseWorkerPool>();
 
-// Behind Caddy all requests come from 127.0.0.1; take the client IP from X-Forwarded-For (loopback proxies are trusted by default).
-builder.Services.Configure<ForwardedHeadersOptions>(o => o.ForwardedHeaders = ForwardedHeaders.XForwardedFor | ForwardedHeaders.XForwardedProto);
+// Behind Caddy: take client IP and scheme (for the Secure cookie flag) from X-Forwarded-For/-Proto.
+// Only loopback proxies are trusted by default. In Docker, Caddy on the host connects through the bridge
+// network (e.g. 172.17.0.1), so production sets ForwardedHeaders:TrustAllProxies. That is safe only because
+// the container port is published on 127.0.0.1 and nothing but the host can reach it (deploy/docker-compose.yml).
+builder.Services.Configure<ForwardedHeadersOptions>(o =>
+{
+    o.ForwardedHeaders = ForwardedHeaders.XForwardedFor | ForwardedHeaders.XForwardedProto;
+    if (config.GetValue("ForwardedHeaders:TrustAllProxies", false))
+    {
+        o.KnownIPNetworks.Clear();
+        o.KnownProxies.Clear();
+    }
+});
 
 builder.Services.AddRateLimiter(o =>
 {

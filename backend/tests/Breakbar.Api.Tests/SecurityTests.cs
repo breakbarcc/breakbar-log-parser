@@ -71,6 +71,24 @@ public sealed class SecurityTests
         Assert.False(report.Headers.Contains("Set-Cookie"));
     }
 
+    [Fact]
+    public async Task Identity_cookie_is_secure_behind_a_trusted_https_proxy()
+    {
+        await using var factory = new ApiFactory(settings: new() { ["ForwardedHeaders:TrustAllProxies"] = "true" });
+        var client = factory.CreateClient();
+        using var request = new HttpRequestMessage(HttpMethod.Get, "/api/jobs");
+        request.Headers.Add("X-Forwarded-Proto", "https");
+        request.Headers.Add("X-Forwarded-For", "203.0.113.7");
+
+        var response = await client.SendAsync(request, Ct);
+
+        string cookie = response.Headers.GetValues("Set-Cookie").Single();
+        Assert.Contains("bb_uid=", cookie, StringComparison.Ordinal);
+        Assert.Contains("secure", cookie, StringComparison.OrdinalIgnoreCase);
+        Assert.Contains("httponly", cookie, StringComparison.OrdinalIgnoreCase);
+        Assert.DoesNotContain("domain=", cookie, StringComparison.OrdinalIgnoreCase);
+    }
+
     // ---- Zip bombs and invalid archives --------------------------------------------------------
 
     [Fact]
