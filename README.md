@@ -80,4 +80,4 @@ Then build, run the tests, and adjust `EliteInsightsAdapter.cs` if the EI API ch
 
 ## License
 
-Elite Insights is MIT licensed (see the submodule's LICENSE).
+[MIT](LICENSE). Third-party parts keep their own licenses: Elite Insights (MIT, see the submodule's LICENSE), the fonts Inter, Space Grotesk and JetBrains Mono (SIL Open Font License, bundled via `@fontsource`).
