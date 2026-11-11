@@ -1,0 +1,78 @@
+@import "tailwindcss";
+
+/* Self-hosted fonts (no Google Fonts requests, see docs/PLAN.md 4b). Latin subsets only. */
+@import "@fontsource/inter/latin-400.css";
+@import "@fontsource/inter/latin-500.css";
+@import "@fontsource/inter/latin-600.css";
+@import "@fontsource/space-grotesk/latin-600.css";
+@import "@fontsource/space-grotesk/latin-700.css";
+@import "@fontsource/jetbrains-mono/latin-400.css";
+
+/* Design tokens from the Claude Design draft (dark theme, teal accent). */
+@theme {
+  --color-bg: #0e1116;
+  --color-bg-deep: #0b0e12;
+  --color-panel: #0f141a;
+  --color-card: #11161d;
+  --color-drop: #121820;
+  --color-raised: #161c24;
+  --color-line: #1f2630;
+  --color-line-soft: #1a2029;
+  --color-line-strong: #2f3946;
+
+  --color-text: #e6eaf0;
+  --color-text-2: #c9d1db;
+  --color-muted: #9aa4b2;
+  --color-faint: #8a94a3;
+
+  --color-accent: #3fd0c9;
+  --color-accent-ink: #06201f;
+  --color-accent-soft: #12302e;
+  --color-link: #5fe0d9;
+  --color-link-hover: #a6f0eb;
+
+  --color-ok: #7fe3a0;
+  --color-bad: #f4a39a;
+  --color-bad-soft: #33191a;
+  --color-warn: #f2a93b;
+  --color-warn-soft: #2e2412;
+  --color-info: #8fa7ff;
+  --color-info-soft: #1a2236;
+
+  --font-sans: "Inter", system-ui, sans-serif;
+  --font-display: "Space Grotesk", "Inter", sans-serif;
+  --font-mono: "JetBrains Mono", ui-monospace, monospace;
+}
+
+@layer base {
+  html {
+    background: var(--color-bg);
+    color: var(--color-text);
+    font-family: var(--font-sans);
+    font-size: 16px;
+    line-height: 1.5;
+    color-scheme: dark;
+  }
+  a {
+    color: var(--color-link);
+  }
+  a:hover {
+    color: var(--color-link-hover);
+  }
+  :focus-visible {
+    outline: 2px solid var(--color-accent);
+    outline-offset: 2px;
+  }
+}
+
+/* Indeterminate progress bar for "Wird verarbeitet" (EI reports no percentage). */
+@keyframes indeterminate {
+  from { transform: translateX(-100%); }
+  to { transform: translateX(250%); }
+}
+@utility animate-indeterminate {
+  animation: indeterminate 1.4s ease-in-out infinite;
+}
+@media (prefers-reduced-motion: reduce) {
+  .animate-indeterminate { animation: none; }
+}
