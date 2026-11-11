@@ -20,6 +20,12 @@ Read [docs/PLAN.md](docs/PLAN.md) before larger changes; it records decisions an
 - No Redis, no Postgres, no extra containers unless PLAN.md is updated first.
 - Do not name code folders `data`/`Data`: runtime data lives in `data/` and is git-ignored (Windows paths are case-insensitive).
 
+## Frontend (`frontend/`, PLAN.md 5a)
+- React 19 + TypeScript + Vite + Tailwind 4 + React Router; design tokens live in `src/styles.css` (`@theme`). Use the tokens, not new hex values.
+- Everything self-hosted (fonts via `@fontsource`, no CDNs, no Google Fonts): the API sends a strict CSP (`default-src 'self'`).
+- All API calls in `src/lib/api.ts`; upload/job state in `src/lib/uploads.tsx`; pure logic in `src/lib/rows.ts` with vitest tests.
+- UI text is German. `npm run build` writes to `backend/src/Breakbar.Api/wwwroot` (git-ignored).
+
 ## Conventions
 - .NET 10, nullable enabled, warnings are errors (`backend/Directory.Build.props`).
 - Tests: xUnit v3 on Microsoft.Testing.Platform: `dotnet test --solution Breakbar.slnx -c Release` from `backend/`.

@@ -249,7 +249,7 @@ Code: `backend/src/Breakbar.Api/`. Alle Antworten JSON, Job-IDs 32 Hex-Zeichen, 
 
 | Methode + Pfad | Zweck |
 |---|---|
-| `POST /api/uploads?name=<datei>&batch=<id>` | **Eine Datei als roher Body** (`application/octet-stream`, kein Multipart): wird beim Empfang direkt auf die Platte geschrieben und gleichzeitig gehasht (eine einzige Schreiboperation auf der HDD). Antwort `202` (eingereiht), `200` (gleiche Datei schon geparst → sofort `done`), `400` (Name/Endung), `413` (zu groß), `422` (kein gültiger Log), `429` (Rate-Limit). Mehrere Dateien = mehrere parallele Requests (Fortschritt pro Datei per XHR möglich). |
+| `POST /api/uploads?name=<datei>&batch=<id>&anonymize=true` | **Eine Datei als roher Body** (`application/octet-stream`, kein Multipart): wird beim Empfang direkt auf die Platte geschrieben und gleichzeitig gehasht (eine einzige Schreiboperation auf der HDD). Antwort `202` (eingereiht), `200` (gleiche Datei schon geparst → sofort `done`), `400` (Name/Endung), `413` (zu groß), `422` (kein gültiger Log), `429` (Rate-Limit). Mehrere Dateien = mehrere parallele Requests (Fortschritt pro Datei per XHR möglich). |
 | `GET /api/jobs?batch=<id>` | Jobs des aktuellen Users (neueste zuerst, max. 500), inkl. Warteposition |
 | `GET /api/jobs/{id}` | ein Job |
 | `DELETE /api/jobs/{id}` | wartenden Job abbrechen (`409`, wenn er schon läuft) |
@@ -312,6 +312,21 @@ Abgewogene Alternativen:
 | Blazor Server | C# durchgängig | dauerhafte SignalR-Verbindung pro Tab = RAM auf dem VPS |
 
 Svelte wäre die beste Wahl für ein **isoliertes** Projekt. Mit voidlog als Schwesterprojekt überwiegt der Vorteil eines einheitlichen Stacks.
+
+## 5a. Umgesetztes Frontend (Stand 2026-11-11)
+
+Code: `frontend/` (React 19, TypeScript, Vite, Tailwind 4, React Router). Grundlage ist der Entwurf aus Claude Design (dunkles Theme, Akzent `#3FD0C9`, Schriften Inter / Space Grotesk / JetBrains Mono).
+
+- **Seiten:** `/` Upload (Drag & Drop oder Dateiauswahl, Option „Spielernamen anonymisieren“, So funktioniert's, API-Kurzdoku, Dank an Elite Insights), `/uploads` Meine Uploads, `/impressum` und `/datenschutz` (Platzhalter – die Texte muss der Betreiber liefern).
+- **Meine Uploads:** bis zu 3 parallele Uploads per XHR mit Fortschritt; danach Status live per SSE (Warteschlange mit Position, „Wird verarbeitet“ mit unbestimmtem Balken, Fertig, Fehler, Abgebrochen). Fertige Logs: Kampf, Erfolg/Fehlschlag, Dauer, Link kopieren, „Öffnen“ (neuer Tab auf `reports.breakbar.cc/r/{id}`). Wartende Jobs lassen sich abbrechen, fehlgeschlagene Uploads erneut versuchen oder entfernen. „Alle Links kopieren“. Unter Tablet-Breite Karten statt Tabelle.
+- **Auslieferung:** `npm run build` schreibt nach `backend/src/Breakbar.Api/wwwroot` (nicht im Git); die API liefert die App mit SPA-Fallback und strikter CSP aus (alles selbst gehostet, keine Google Fonts). Entwicklung: `npm run dev` (Port 5173) leitet `/api`, `/r`, `/ei-assets` an die API auf Port 5080 weiter.
+
+**Abweichungen vom Design (bewusst):**
+- Optionen: nur „Spielernamen anonymisieren“. „Detaillierte WvW-Auswertung“ entfällt (Laufzeit und Größe wachsen laut EI exponentiell, siehe 1). „Sichtbarkeit“ entfällt: alle Berichte sind „nur mit Link“, eine öffentliche Liste gibt es nicht. Anonymisiert und nicht anonymisiert sind zwei getrennte Berichte (Dedupe-Schlüssel: Hash + Option).
+- Keine eigene Berichtsseite (Screen 3): „Öffnen“ führt direkt zum EI-Bericht auf `reports.breakbar.cc`. Der Download der Originaldatei entfällt (Uploads werden nach dem Parsen gelöscht).
+- Zusätzliche Zustände „Warteschlange“ (mit Position) und „Abgebrochen“; „Wird verarbeitet“ ohne Prozentwert, weil EI keinen Fortschritt meldet.
+- Texte angepasst: Links zeigen auf `reports.breakbar.cc`, „dauerhaft erreichbar“ entfernt (Aufbewahrung noch offen), Dateiformat `.evtc.zip` statt `.zip`, Limit 200 MB.
+- API- und Über-Abschnitt als Bereiche der Startseite statt eigener Seiten.
 
 ---
 
@@ -447,7 +462,7 @@ import /srv/breakbar-logs/deploy/logs.caddy
 | 2 | `EliteInsightsAdapter`: eine Datei → HTML + JSON (`tools/Breakbar.ParseSpike`) + Tests | In-process funktioniert, siehe 2a | ✅ 2026-11-11 |
 | 3 | FairScheduler + Worker + Tests (Fairness, work-conserving, Cancel) | `FairParseQueue`, `ParseCostEstimator`, `ParseWorkerPool`, 21 Tests; siehe 3a | ✅ 2026-11-11 |
 | 4 | API: Upload, Dedupe, Jobs in SQLite, SSE-Status, Report-Auslieferung | End-to-End per curl geprüft, 10 Integrationstests; siehe 4a | ✅ 2026-11-11 |
-| 5 | Frontend: Multi-Upload mit Fortschritt, Batch-Ansicht, Links | nutzbares MVP | offen |
+| 5 | Frontend: Multi-Upload mit Fortschritt, Batch-Ansicht, Links | `frontend/`, im Browser geprüft; siehe 5a | ✅ 2026-11-11 |
 | 6 | Deploy: Dockerfile, Caddy, Volumes, Retention-Job, Rate-Limits | läuft auf dem VPS | offen |
 | 7 | Feinschliff: RAM-Schätzung aus echten Messwerten nachjustieren, DRR-Gewichtung, Metriken (`/health`, Queue-Länge) | Optimierung nach Messwerten | offen |
 

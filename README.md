@@ -2,7 +2,7 @@
 
 Self-hosted service for parsing Guild Wars 2 arcdps logs (`.evtc`, `.zevtc`) with [Elite Insights](https://github.com/baaron4/GW2-Elite-Insights-Parser) (EI) into HTML reports and JSON. Planned public instance: `logs.breakbar.cc`; it will also serve as the parsing backend for [voidlog](https://github.com/breakbarcc/voidlog).
 
-Status: **backend works end-to-end** – upload API, fair per-user queue, in-process EI parsing, SQLite, live status via SSE and report delivery. Frontend and deployment are not built yet. See [docs/PLAN.md](docs/PLAN.md) for architecture, decisions, API reference (section 4a) and benchmark results.
+Status: **works end-to-end locally** – web frontend, upload API, fair per-user queue, in-process EI parsing, SQLite, live status via SSE and report delivery. Deployment is not built yet. See [docs/PLAN.md](docs/PLAN.md) for architecture, decisions, API reference (section 4a), frontend (5a) and benchmark results.
 
 ## Repository layout
 
@@ -14,13 +14,14 @@ Status: **backend works end-to-end** – upload API, fair per-user queue, in-pro
 | `backend/src/Breakbar.Api/` | ASP.NET Core API: uploads, jobs, SSE, reports, SQLite |
 | `backend/tools/Breakbar.ParseSpike/` | console tool: parse logs in-process, print time and memory |
 | `backend/tests/` | xUnit v3 tests |
+| `frontend/` | React + TypeScript + Vite + Tailwind web app (build goes to the API's `wwwroot`) |
 | `external/GW2-Elite-Insights-Parser/` | EI as git submodule, pinned to a release tag |
 | `benchmark/` | EI CLI benchmark scripts and results |
 | `docs/PLAN.md` | project plan |
 
 ## Getting started
 
-Requirements: .NET 10 SDK, git.
+Requirements: .NET 10 SDK, Node.js 22+, git.
 
 ```bash
 git clone --recurse-submodules <repo-url>
@@ -52,6 +53,18 @@ curl -N -b jar http://localhost:5080/api/events
 ```
 
 Finished reports are at `/r/<reportId>` (HTML) and `/r/<reportId>/json` (EI JSON).
+
+### Frontend
+
+```bash
+cd frontend
+npm install
+npm run dev     # http://localhost:5173, forwards /api, /r, /ei-assets to the API on :5080
+npm test        # unit tests (vitest)
+npm run build   # type-check and build into backend/src/Breakbar.Api/wwwroot
+```
+
+After `npm run build`, the API alone serves the app on http://localhost:5080. In the Claude desktop app, `.claude/launch.json` starts both (`api`, `frontend-dev`).
 
 ## Updating Elite Insights
 
