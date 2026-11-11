@@ -20,4 +20,9 @@
     </Content>
   </ItemGroup>
 
+  <!-- Keep Microsoft.Extensions.* on the same major version as the runtime (net10.0). -->
+  <ItemGroup>
+    <PackageReference Include="Microsoft.Extensions.Hosting.Abstractions" Version="10.0.15" />
+  </ItemGroup>
+
 </Project>

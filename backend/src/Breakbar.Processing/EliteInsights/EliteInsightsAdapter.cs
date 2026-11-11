@@ -14,7 +14,7 @@ namespace Breakbar.Processing.EliteInsights;
 /// only this file (and its options/result types) should need changes.
 /// Thread-safe: one instance is shared by all workers; each call parses one log on the calling thread.
 /// </summary>
-public sealed class EliteInsightsAdapter
+public sealed class EliteInsightsAdapter : IEliteInsightsParser
 {
     private static readonly UTF8Encoding Utf8NoBom = new(false);
     private static readonly CultureInfo EiCulture = CultureInfo.GetCultureInfo("en-US");
