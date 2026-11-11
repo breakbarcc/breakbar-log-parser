@@ -14,7 +14,8 @@ Read [docs/PLAN.md](docs/PLAN.md) before larger changes; it records decisions an
 - EI runs **in-process**, one log per worker thread, always `multiThreadAcceleration: false` (benchmark: multi-threading inside a log gains nothing on the VPS; 2 logs in parallel give ~1.7x).
 - HTML uses external EI assets (`HtmlExternalScripts`) served from a configurable base URL; never let EI write `file://` links.
 - Never edit files inside `external/` – EI is a pinned submodule. Workarounds belong in the adapter.
-- Planned: fair round-robin queue per user, SQLite, SSE, Caddy on the host serves reports and frontend from disk. No Redis, no Postgres, no extra containers unless PLAN.md is updated first.
+- Parsing is scheduled only through `FairParseQueue` + `ParseWorkerPool` (`backend/src/Breakbar.Processing/Queue/`): round-robin per user, memory-aware admission, no overtaking of the head job. Do not start parses elsewhere.
+- Planned: SQLite, SSE, Caddy on the host serves reports and frontend from disk. No Redis, no Postgres, no extra containers unless PLAN.md is updated first.
 
 ## Conventions
 - .NET 10, nullable enabled, warnings are errors (`backend/Directory.Build.props`).

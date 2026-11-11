@@ -196,6 +196,20 @@ Bei 2 Slots und 2 aktiven Usern bekommt jeder User faktisch „seinen“ Worker.
 
 ---
 
+## 3a. Umsetzung der Queue (Stand 2026-11-11)
+
+Code: `backend/src/Breakbar.Processing/Queue/`.
+
+- **`FairParseQueue`**: eine FIFO pro User, User im Ring round-robin. Nach jedem entnommenen Job geht der User ans Ende des Rings. Ein neuer User stellt sich ebenfalls hinten an, wartet also höchstens einen Job eines großen Batches ab (Test `Late_user_waits_for_at_most_one_job_of_a_big_batch`).
+- **Zulassung** vor jedem Start: freier Slot (`MaxParallel = 2`), Summe der RAM-Schätzungen ≤ Budget (2,4 GB), Jobs über 1,2 GB laufen exklusiv, Jobs über 2,4 GB werden beim Einreihen abgelehnt (`EnqueueResult.TooLarge`). Passt der nächste Job nicht, warten die Worker; kleinere Jobs dürfen ihn **nicht überholen**.
+- **`GetPosition(jobId)`** liefert die Warteposition in Round-Robin-Reihenfolge (für die Statusanzeige), `TryRemove` entfernt einen wartenden Job, `GetStats` liefert Kennzahlen.
+- **`ParseCostEstimator`**: RAM-Schätzung `150 MB + 42 × entpackte EVTC-Größe`. Die Größe kommt aus dem Zip-Verzeichnis, ohne zu entpacken; Archive mit ≠ 1 Eintrag werden abgelehnt.
+- **`ParseWorkerPool`** (`BackgroundService`): startet `MaxParallel` Worker, meldet Start/Ende/Absturz/Abbruch an einen `IParseJobObserver`. Nach exklusiven (großen) Jobs wird der Heap kompaktiert, um RAM zurückzugeben.
+- Die Queue ist rein im Speicher. Persistenz (SQLite) und das Wiedereinreihen nach einem Neustart kommen mit Schritt 4 über den Observer.
+- Bewusst weggelassen (bei Bedarf später): Gewichtung/DRR, Limit „max. N−1 laufende Jobs pro User“.
+
+---
+
 ## 4. Architektur
 
 ```
@@ -398,7 +412,7 @@ import /srv/breakbar-logs/deploy/logs.caddy
 | **0** | **Benchmark** in [benchmark/](../benchmark/README.md) (`run-bench.ps1` für Windows, `run-bench.sh` für den VPS) | 2 parallele Jobs, RAM-Formel, Logs/Stunde (Abschnitt 1c) | ✅ 2026-11-11 (WvW offen) |
 | 1 | Monorepo-Skelett, Submodule (v3.32.0.0), Solution baut gegen EI-Projekte | `dotnet build` grün, 0 Warnungen | ✅ 2026-11-11 |
 | 2 | `EliteInsightsAdapter`: eine Datei → HTML + JSON (`tools/Breakbar.ParseSpike`) + Tests | In-process funktioniert, siehe 2a | ✅ 2026-11-11 |
-| 3 | FairScheduler + Worker + Tests (Fairness, work-conserving, Cancel) | Kern-Logik abgesichert | offen |
+| 3 | FairScheduler + Worker + Tests (Fairness, work-conserving, Cancel) | `FairParseQueue`, `ParseCostEstimator`, `ParseWorkerPool`, 21 Tests; siehe 3a | ✅ 2026-11-11 |
 | 4 | API: Upload, Dedupe, Jobs in SQLite, SSE-Status, Report-Auslieferung | End-to-End per curl | offen |
 | 5 | Frontend: Multi-Upload mit Fortschritt, Batch-Ansicht, Links | nutzbares MVP | offen |
 | 6 | Deploy: Dockerfile, Caddy, Volumes, Retention-Job, Rate-Limits | läuft auf dem VPS | offen |
