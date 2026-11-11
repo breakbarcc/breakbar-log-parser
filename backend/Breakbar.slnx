@@ -4,6 +4,7 @@
     <Project Path="src/Breakbar.Processing/Breakbar.Processing.csproj" />
   </Folder>
   <Folder Name="/tests/">
+    <Project Path="tests/Breakbar.Api.Tests/Breakbar.Api.Tests.csproj" />
     <Project Path="tests/Breakbar.Processing.Tests/Breakbar.Processing.Tests.csproj" />
   </Folder>
   <Folder Name="/tools/">

@@ -129,32 +129,55 @@ public sealed class FairParseQueue(ParseQueueOptions options)
     {
         lock (_lock)
         {
-            // Round-robin order: round r takes the r-th job of every user that has more than r jobs,
-            // users in ring order. A job at index k of user u is preceded by min(len, k) jobs of every
-            // other user, plus one more job from each user ahead of u in the ring that has more than k jobs.
-            int ringIndex = 0;
-            foreach (string userId in _ring)
+            return GetPositionLocked(jobId);
+        }
+    }
+
+    private int? GetPositionLocked(Guid jobId)
+    {
+        // Round-robin order: round r takes the r-th job of every user that has more than r jobs,
+        // users in ring order. A job at index k of user u is preceded by min(len, k) jobs of every
+        // other user, plus one more job from each user ahead of u in the ring that has more than k jobs.
+        int ringIndex = 0;
+        foreach (string userId in _ring)
+        {
+            var jobs = _jobsByUser[userId];
+            int k = IndexOf(jobs, jobId);
+            if (k >= 0)
             {
-                var jobs = _jobsByUser[userId];
-                int k = IndexOf(jobs, jobId);
-                if (k >= 0)
+                int position = k; // this user's own earlier jobs
+                int otherIndex = 0;
+                foreach (string other in _ring)
                 {
-                    int position = k; // this user's own earlier jobs
-                    int otherIndex = 0;
-                    foreach (string other in _ring)
+                    if (other != userId)
                     {
-                        if (other != userId)
-                        {
-                            int len = _jobsByUser[other].Count;
-                            position += Math.Min(len, k) + (otherIndex < ringIndex && len > k ? 1 : 0);
-                        }
-                        otherIndex++;
+                        int len = _jobsByUser[other].Count;
+                        position += Math.Min(len, k) + (otherIndex < ringIndex && len > k ? 1 : 0);
                     }
-                    return position;
+                    otherIndex++;
                 }
-                ringIndex++;
+                return position;
             }
-            return null;
+            ringIndex++;
+        }
+        return null;
+    }
+
+    /// <summary>Positions of all waiting jobs of one user (same meaning as <see cref="GetPosition"/>).</summary>
+    public IReadOnlyDictionary<Guid, int> GetPositions(string userId)
+    {
+        lock (_lock)
+        {
+            if (!_jobsByUser.TryGetValue(userId, out var jobs))
+            {
+                return new Dictionary<Guid, int>();
+            }
+            var result = new Dictionary<Guid, int>(jobs.Count);
+            foreach (var job in jobs)
+            {
+                result[job.Id] = GetPositionLocked(job.Id)!.Value;
+            }
+            return result;
         }
     }
 

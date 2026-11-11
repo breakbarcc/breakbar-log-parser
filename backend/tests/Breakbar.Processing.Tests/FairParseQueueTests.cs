@@ -204,6 +204,12 @@ public sealed class FairParseQueueTests
         Assert.Equal(3, queue.GetPosition(b[1].Id));
         Assert.Equal(4, queue.GetPosition(a[2].Id));
         Assert.Null(queue.GetPosition(Guid.NewGuid()));
+
+        var positionsOfB = queue.GetPositions("B");
+        Assert.Equal(2, positionsOfB.Count);
+        Assert.Equal(1, positionsOfB[b[0].Id]);
+        Assert.Equal(3, positionsOfB[b[1].Id]);
+        Assert.Empty(queue.GetPositions("nobody"));
     }
 
     [Fact]
