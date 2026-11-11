@@ -1,0 +1,13 @@
+host=vps
+os=Debian GNU/Linux 13 (trixie) 6.12.105+deb13-amd64
+cpu=AMD EPYC-Genoa Processor
+logical_cores=2
+ram_mb=3919
+mem_used_before_mb=1011
+ei_path=/home/pom/ei-bench/ei/GuildWars2EliteInsights-CLI.dll
+ei_version=v3.32.0.0
+dotnet=Microsoft.AspNetCore.App 10.0.15 [/home/pom/.dotnet/shared/Microsoft.AspNetCore.App];Microsoft.NETCore.App 10.0.15 [/home/pom/.dotnet/shared/Microsoft.NETCore.App];
+combat_replay=true
+nice=10
+repeat=1
+logs=13

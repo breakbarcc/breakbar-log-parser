@@ -1,0 +1,7 @@
+logs/
+results*/*/out/
+ei-cli/
+ei/
+.dotnet/
+_downloads/
+*.zip

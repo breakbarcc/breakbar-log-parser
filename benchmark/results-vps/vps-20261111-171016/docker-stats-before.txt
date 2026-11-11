@@ -1,0 +1,5 @@
+NAME                 CPU %     MEM USAGE / LIMIT
+voidlog-worker-1     0.04%     172.5MiB / 3.828GiB
+voidlog-web-1        0.00%     164.1MiB / 3.828GiB
+voidlog-postgres-1   0.00%     65.93MiB / 3.828GiB
+voidlog-redis-1      0.41%     14.29MiB / 3.828GiB

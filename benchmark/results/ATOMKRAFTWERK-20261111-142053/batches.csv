@@ -1,0 +1,7 @@
+batch,repeat,concurrency,single_threaded,logs,ok,total_wall_s,logs_per_hour,combined_peak_mb
+A,1,1,false,13,13,48.41,966.7,859
+B,1,1,true,13,13,51.73,904.7,958
+C,1,2,true,13,13,27.18,1721.8,1180
+A,2,1,false,13,13,48.06,973.8,963
+B,2,1,true,13,13,51.15,914.9,963
+C,2,2,true,13,13,27.16,1723.3,1243

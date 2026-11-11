@@ -1,0 +1,4 @@
+batch,repeat,concurrency,single_threaded,logs,ok,total_wall_s,logs_per_hour,mem_used_increase_peak_mb
+A,1,1,false,13,13,75.7,618.2,795
+B,1,1,true,13,13,75.7,618.2,803
+C,1,2,true,13,13,43.9,1066.1,1151

@@ -1,0 +1,22 @@
+# .NET
+bin/
+obj/
+*.user
+.vs/
+.idea/
+*.DotSettings.user
+TestResults/
+
+# Node / frontend
+node_modules/
+dist/
+
+# Local runtime data
+/data/
+*.db
+*.db-shm
+*.db-wal
+
+# OS
+Thumbs.db
+.DS_Store
