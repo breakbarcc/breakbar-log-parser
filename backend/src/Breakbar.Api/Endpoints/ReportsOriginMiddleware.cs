@@ -49,6 +49,17 @@ public static class ReportsOriginMiddleware
                 headers["X-Robots-Tag"] = "noindex, nofollow";         // reports are "public by link", not for search engines
                 headers.ContentSecurityPolicy = "frame-ancestors 'none'";
             }
+            else
+            {
+                // Frontend and API: everything is self-hosted (fonts included), so a strict policy is possible.
+                // 'unsafe-inline' for styles only, because React renders style attributes.
+                var headers = context.Response.Headers;
+                headers.XContentTypeOptions = "nosniff";
+                headers["Referrer-Policy"] = "same-origin";
+                headers.ContentSecurityPolicy =
+                    "default-src 'self'; script-src 'self'; style-src 'self' 'unsafe-inline'; img-src 'self' data:; " +
+                    "font-src 'self'; connect-src 'self'; object-src 'none'; base-uri 'self'; form-action 'self'; frame-ancestors 'none'";
+            }
             await next(context);
         });
     }

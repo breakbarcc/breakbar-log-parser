@@ -21,3 +21,6 @@ dist/
 # OS
 Thumbs.db
 .DS_Store
+
+# Frontend build output served by the API (built from frontend/)
+/backend/src/Breakbar.Api/wwwroot/

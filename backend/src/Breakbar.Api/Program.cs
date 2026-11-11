@@ -86,8 +86,31 @@ app.UseStaticFiles(new StaticFileOptions
     RequestPath = "/ei-assets",
 });
 
+// Frontend: static build of frontend/ (Vite writes it to wwwroot). Hashed assets are cached forever,
+// index.html never, so a deployment is visible immediately.
+string frontendDirectory = Path.GetFullPath(config["Frontend:Directory"] ?? "wwwroot", builder.Environment.ContentRootPath);
+PhysicalFileProvider? frontendFiles = Directory.Exists(frontendDirectory) ? new PhysicalFileProvider(frontendDirectory) : null;
+var frontendStaticOptions = new StaticFileOptions
+{
+    FileProvider = frontendFiles,
+    OnPrepareResponse = ctx => ctx.Context.Response.Headers.CacheControl =
+        ctx.Context.Request.Path.StartsWithSegments("/assets") ? "public, max-age=31536000, immutable" : "no-cache",
+};
+if (frontendFiles is not null)
+{
+    app.UseDefaultFiles(new DefaultFilesOptions { FileProvider = frontendFiles });
+    app.UseStaticFiles(frontendStaticOptions);
+}
+
 app.MapJobEndpoints();
 app.MapReportEndpoints();
+
+// Unknown API paths are 404 (not the SPA); every other unknown path is a client-side route of the SPA.
+app.MapFallback("/api/{**rest}", () => Results.NotFound());
+if (frontendFiles is not null)
+{
+    app.MapFallbackToFile("index.html", frontendStaticOptions);
+}
 
 app.Run();
 
