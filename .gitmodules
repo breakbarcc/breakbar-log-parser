@@ -1,0 +1,4 @@
+[submodule "external/GW2-Elite-Insights-Parser"]
+	path = external/GW2-Elite-Insights-Parser
+	url = https://github.com/baaron4/GW2-Elite-Insights-Parser.git
+	shallow = true
