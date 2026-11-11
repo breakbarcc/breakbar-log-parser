@@ -1,6 +1,6 @@
 import { Link, NavLink, Outlet } from 'react-router'
 import { useUploads } from '../lib/uploads'
-import { EI_REPO } from './links'
+import { EI_REPO, IMPRESSUM_URL } from './links'
 
 function Logo() {
   return (
@@ -66,9 +66,9 @@ function Footer() {
           Auswertung: <a href={EI_REPO}>GW2 Elite Insights</a>.
         </p>
         <nav aria-label="Rechtliches" className="flex gap-5">
-          <Link to="/impressum" className="text-[#A9B3C0]">
+          <a href={IMPRESSUM_URL} className="text-[#A9B3C0]">
             Impressum
-          </Link>
+          </a>
           <Link to="/datenschutz" className="text-[#A9B3C0]">
             Datenschutz
           </Link>

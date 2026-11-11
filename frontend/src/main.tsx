@@ -1,12 +1,23 @@
-import { StrictMode } from 'react'
+import { StrictMode, useEffect } from 'react'
 import { createRoot } from 'react-dom/client'
 import { BrowserRouter, Link, Route, Routes } from 'react-router'
 import { Layout } from './components/Layout'
 import { UploadsProvider } from './lib/uploads'
-import { LegalPage } from './pages/LegalPage'
+import { IMPRESSUM_URL } from './components/links'
+import { PrivacyPage } from './pages/PrivacyPage'
 import { UploadPage } from './pages/UploadPage'
 import { UploadsPage } from './pages/UploadsPage'
 import './styles.css'
+
+/** Old /impressum links: the Impressum is maintained on the main site. */
+function ExternalRedirect({ to }: { to: string }) {
+  useEffect(() => window.location.replace(to), [to])
+  return (
+    <p className="mx-auto max-w-[800px] px-4 py-16 text-muted sm:px-8">
+      Weiterleitung … <a href={to}>Weiter zum Impressum</a>
+    </p>
+  )
+}
 
 function NotFound() {
   return (
@@ -28,8 +39,8 @@ createRoot(document.getElementById('root')!).render(
           <Route element={<Layout />}>
             <Route index element={<UploadPage />} />
             <Route path="uploads" element={<UploadsPage />} />
-            <Route path="impressum" element={<LegalPage title="Impressum" />} />
-            <Route path="datenschutz" element={<LegalPage title="Datenschutz" />} />
+            <Route path="impressum" element={<ExternalRedirect to={IMPRESSUM_URL} />} />
+            <Route path="datenschutz" element={<PrivacyPage />} />
             <Route path="*" element={<NotFound />} />
           </Route>
         </Routes>
