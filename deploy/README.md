@@ -95,7 +95,7 @@ Dann im Browser `https://logs.breakbar.cc` öffnen und einen Log hochladen.
   sudo fallocate -l 3G /swapfile && sudo chmod 600 /swapfile && sudo mkswap /swapfile && sudo swapon /swapfile
   echo '/swapfile none swap sw 0 0' | sudo tee -a /etc/fstab
   ```
-- **Impressum und Datenschutz** vor dem öffentlichen Start ausfüllen (`frontend/src/pages/LegalPage.tsx`).
+- **Vor dem öffentlichen Start:** Die Datenschutzerklärung (`frontend/src/pages/PrivacyPage.tsx`) verspricht, dass Berichte und Verwaltungsdaten **höchstens 7 Tage** gespeichert werden. Das muss technisch umgesetzt sein (Plan, Abschnitt 4c), und die Backup-Empfehlung unten muss dazu passen. Das Impressum liegt auf `www.breakbar.cc/de/impressum`.
 
 ## Update
 

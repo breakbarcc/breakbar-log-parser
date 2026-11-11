@@ -283,6 +283,18 @@ Code: `backend/src/Breakbar.Api/`. Alle Antworten JSON, Job-IDs 32 Hex-Zeichen, 
 2. **Zip-Bomben.** Der Zip-Eintrag wird beim Upload einmal komplett entpackt, mit harter Obergrenze (konfiguriertes Limit, gedeckelt durch das RAM-Budget: ~53 MB EVTC). Er muss mit `EVTC` beginnen, und Archive mit widersprüchlichen Größenangaben werden abgelehnt. (Beobachtet: .NET liest einen Eintrag nie über die angegebene Größe hinaus, EI war daher schon begrenzt; die Prüfung macht den Schutz ausdrücklich und unabhängig davon.)
 3. **Platte/Queue volllaufen lassen** trotz wechselnder Cookies/IPs: Limits pro User, gesamt und für freien Speicher (siehe 4a).
 
+## 4c. Datenschutz (Stand 2026-11-11)
+
+Die Datenschutzerklärung steht im Frontend (`/datenschutz`, `frontend/src/pages/PrivacyPage.tsx`), das Impressum liegt auf `https://www.breakbar.cc/de/impressum` (Footer verlinkt dorthin, `/impressum` leitet weiter). Jede Subdomain hat laut Hauptseite ihre eigene Erklärung; Verantwortlicher ist derselbe wie dort.
+
+Was sie beschreibt, und woran man den Text koppeln muss:
+- **Keine Analyse, kein Tracking.** Die App lädt nichts von Dritten; Schriften sind selbst gehostet (kein Google Fonts in der App).
+- **Cookie `bb_uid`** (zufällige Kennung, host-only, HttpOnly, Secure, 1 Jahr; § 25 Abs. 2 Nr. 2 TDDDG) und zwei `localStorage`-Schlüssel (`breakbar.anonymize`, `breakbar.dismissedJobs`). Das Sprach-Cookie der Hauptseite (`breakbar-language`, gilt für alle Subdomains) wird mitgesendet, aber nicht gelesen. Neue Cookies oder Speicherschlüssel → Erklärung ändern.
+- **IP-Adresse:** nur im Speicher für das Upload-Limit, kein Zugriffslog (die App loggt Anfragen nicht, `deploy/logs.caddy` hat keine `log`-Direktive). Der VPS-Anbieter ist als Auftragsverarbeiter genannt, aber noch nicht namentlich.
+- **Logs und Berichte:** enthalten Charakter- und Accountnamen auch von Mitspielern (Art. 6 Abs. 1 lit. b und f DSGVO, Option „Spielernamen anonymisieren“). Originaldatei wird nach der Auswertung gelöscht. **Berichte und Verwaltungsdaten: höchstens 7 Tage**, auch aus Backups – **zugesagt, aber noch nicht umgesetzt** (siehe nächster Schritt in Abschnitt 7).
+- **Berichtsseiten laden Inhalte von Dritten nach** (EI-Vorlage): Google Fonts (`fonts.googleapis.com`/`fonts.gstatic.com`), cdnjs (Cloudflare), jsDelivr, code.jquery.com, cdn.plot.ly, Bilder von `render.guildwars2.com`/`wiki.guildwars2.com`, Ersatzquellen imgur/DuckDuckGo-Proxy/darthmaim/gw2dat. Dabei geht die IP des Besuchers an diese Anbieter. Die Erklärung benennt das offen. Beseitigen ließe es sich nur, indem der Adapter diese Dateien selbst ausliefert (Bibliotheken vendorn, Schrift lokal, Bild-Hosts in der CSP der Berichts-Origin begrenzen); Bilder von ArenaNet bleiben auch dann extern, es sei denn, man hostet die Symbole selbst.
+- Pflege: Wer Speicherdauer, Cookies, Dienste oder Drittanbieter ändert, ändert `PrivacyPage.tsx` (Konstante `REPORT_RETENTION_DAYS`, Datum `UPDATED`) im selben Commit.
+
 **Offen / beim Deployment beachten:**
 - `Secure`-Flag des Cookies hängt an `X-Forwarded-Proto` von Caddy → nach dem Deployment prüfen.
 - API-Key von voidlog nur als Umgebungsvariable/Secret, nie im Repo; wer ihn hat, sieht alle voidlog-Jobs.
@@ -476,6 +488,7 @@ Anleitung Schritt für Schritt: [deploy/README.md](../deploy/README.md).
 | 4 | API: Upload, Dedupe, Jobs in SQLite, SSE-Status, Report-Auslieferung | End-to-End per curl geprüft, 10 Integrationstests; siehe 4a | ✅ 2026-11-11 |
 | 5 | Frontend: Multi-Upload mit Fortschritt, Batch-Ansicht, Links | `frontend/`, im Browser geprüft; siehe 5a | ✅ 2026-11-11 |
 | 6 | Deploy: Dockerfile, Caddy, Volumes, Retention-Job, Rate-Limits | vorbereitet (Image, CI, Compose, Caddy, Anleitung, Aufbewahrung); Ausrollen auf dem VPS offen | 🟡 2026-11-11 |
+| **6c** | **Nächster Task:** Aufbewahrung höchstens **7 Tage** für **alle** Berichte und Job-Daten (auch aus Backups), weil die Datenschutzerklärung es bereits zusagt; siehe 4c | `RetentionService` mit `Retention:ReportDays`, Job-Zeilen löschen, Tests, Backup-Anleitung anpassen | **offen – vor dem Livegang** |
 | 7 | Feinschliff: RAM-Schätzung aus echten Messwerten nachjustieren, DRR-Gewichtung, Metriken (`/health`, Queue-Länge) | Optimierung nach Messwerten | offen |
 
 ---

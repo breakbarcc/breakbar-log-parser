@@ -25,6 +25,7 @@ Read [docs/PLAN.md](docs/PLAN.md) before larger changes; it records decisions an
 - Everything self-hosted (fonts via `@fontsource`, no CDNs, no Google Fonts): the API sends a strict CSP (`default-src 'self'`).
 - All API calls in `src/lib/api.ts`; upload/job state in `src/lib/uploads.tsx`; pure logic in `src/lib/rows.ts` with vitest tests.
 - UI text is German. `npm run build` writes to `backend/src/Breakbar.Api/wwwroot` (git-ignored).
+- **Privacy (PLAN.md 4c):** `src/pages/PrivacyPage.tsx` describes exactly what the service stores and loads (cookie, localStorage, retention days, third parties in EI reports). Change it in the same commit whenever one of those changes. It already promises **max. 7 days** retention for reports and job data; that is a pending task, do not deploy before it is implemented.
 
 ## Conventions
 - .NET 10, nullable enabled, warnings are errors (`backend/Directory.Build.props`).
