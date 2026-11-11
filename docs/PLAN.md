@@ -255,16 +255,38 @@ Code: `backend/src/Breakbar.Api/`. Alle Antworten JSON, Job-IDs 32 Hex-Zeichen, 
 | `DELETE /api/jobs/{id}` | wartenden Job abbrechen (`409`, wenn er schon läuft) |
 | `GET /api/events` | Server-Sent Events: `ready`, `job` (Statuswechsel), `positions` (Queue hat sich bewegt), `ping` (alle 20 s) |
 | `GET /api/health` | EI-Version und Queue-Kennzahlen |
-| `GET /r/{id}` | Report-HTML |
-| `GET /r/{id}/json` | EI-JSON (gzip, `Content-Encoding: gzip`) |
-| `GET /ei-assets/*` | JS/CSS von Elite Insights |
+| `GET /r/{id}` | Report-HTML – **nur auf `reports.breakbar.cc`** (siehe 4b) |
+| `GET /r/{id}/json` | EI-JSON (gzip, `Content-Encoding: gzip`) – nur auf `reports.breakbar.cc` |
+| `GET /ei-assets/*` | JS/CSS von Elite Insights – nur auf `reports.breakbar.cc` |
 
 - **Identität:** Browser bekommen ein anonymes Cookie `bb_uid` (128 Bit Zufall, HttpOnly, 1 Jahr). Dienste wie voidlog schicken `X-Api-Key` (Konfiguration `ServiceClients:ApiKeys:<name>`), werden zum User `svc:<name>`, sind vom Rate-Limit ausgenommen und bekommen eine eigene Fair-Queue-Spur.
 - **Rate-Limit:** 120 Uploads pro Minute und IP (`Uploads:UploadsPerMinutePerIp`); die Client-IP kommt hinter Caddy aus `X-Forwarded-For`.
 - **Dedupe:** SHA-256 der hochgeladenen Datei. Ist die Datei schon als Report vorhanden, gibt es keinen Parse. Laufen zwei identische Uploads gleichzeitig, wird beim Speichern der zweite Report verworfen und auf den ersten verwiesen.
 - **SQLite** (`data/breakbar.db`, WAL): Tabellen `jobs` und `reports`; alle SQL-Befehle in `Persistence/JobStore.cs` (Dapper). Beim Start werden Jobs mit Status `queued`/`running` wieder eingereiht.
 - **Status eines Jobs:** `queued` → `running` → `done` | `failed`, oder `cancelled`.
+- **Limits beim Upload:** max. 300 wartende Jobs pro User (Dienste ausgenommen), max. 3000 wartende Jobs insgesamt, keine Uploads bei < 5 GB freiem Platz (`Uploads:*`).
 - Noch nicht umgesetzt: Retention/Quota (Schritt 6), Admin-Seite, Abruf über vorsignierte R2-URLs für voidlog.
+
+## 4b. Sicherheit (Stand 2026-11-11)
+
+**Kann ein Nutzer fremde Logs lesen?** Über die API nicht: Jobs sind an das 128-Bit-Zufalls-Cookie bzw. den API-Key gebunden, Report-IDs haben ~59 Bit Zufall (Erraten praktisch unmöglich), es gibt keine Liste aller Reports, IDs und Dateinamen werden streng geprüft. Reports sind bewusst „öffentlich per Link“ wie bei dps.report.
+
+**Behobene Schwachstellen:**
+
+1. **Reports auf eigener Origin `reports.breakbar.cc`.** Report-HTML enthält JavaScript von EI und sechs fremden CDNs, und die Logdaten darin sind angreiferkontrolliert (EVTC ist nicht signiert). Lief ein Report auf `logs.breakbar.cc`, könnte eingeschleustes Skript mit dem Cookie des Besuchers `/api/jobs` lesen und dessen Report-Links abgreifen. Jetzt (`Reports:BaseUrl`, Middleware `ReportsOriginMiddleware`):
+   - `reports.breakbar.cc` liefert nur `/r/*` und `/ei-assets/*`, alles andere ist 404.
+   - `logs.breakbar.cc/r/*` leitet per 301 dorthin um, `/ei-assets` gibt es dort nicht.
+   - Das Cookie ist host-only (wird an `reports.` nicht gesendet), die API sendet keine CORS-Header → ein Report kann API-Antworten nicht lesen.
+   - Report-Antworten: `Referrer-Policy: no-referrer` (Report-IDs gehen nicht an die CDNs), `X-Robots-Tag: noindex`, `nosniff`, `frame-ancestors 'none'`.
+   - Eine CSP-`sandbox` auf derselben Origin war keine Option: EI nutzt `localStorage`, das in der Sandbox blockiert ist.
+   - Lokal (ohne `Reports:BaseUrl`) laufen Reports weiter auf derselben Origin; gesetzt wird die Domain in `appsettings.Production.json`.
+2. **Zip-Bomben.** Der Zip-Eintrag wird beim Upload einmal komplett entpackt, mit harter Obergrenze (konfiguriertes Limit, gedeckelt durch das RAM-Budget: ~53 MB EVTC). Er muss mit `EVTC` beginnen, und Archive mit widersprüchlichen Größenangaben werden abgelehnt. (Beobachtet: .NET liest einen Eintrag nie über die angegebene Größe hinaus, EI war daher schon begrenzt; die Prüfung macht den Schutz ausdrücklich und unabhängig davon.)
+3. **Platte/Queue volllaufen lassen** trotz wechselnder Cookies/IPs: Limits pro User, gesamt und für freien Speicher (siehe 4a).
+
+**Offen / beim Deployment beachten:**
+- `Secure`-Flag des Cookies hängt an `X-Forwarded-Proto` von Caddy → nach dem Deployment prüfen.
+- API-Key von voidlog nur als Umgebungsvariable/Secret, nie im Repo; wer ihn hat, sieht alle voidlog-Jobs.
+- Fremd-CDNs in EIs HTML (siehe 2a) später selbst hosten.
 
 ---
 
@@ -387,12 +409,20 @@ logs.breakbar.cc {
         max_size 200MB
     }
 
-    # Alles an den .NET-Container: API, SSE, Reports, EI-Assets, Frontend
+    # API, SSE, Frontend → .NET-Container
     reverse_proxy 127.0.0.1:4100 {
         flush_interval -1   # SSE (/api/events) sofort durchreichen
     }
 }
+
+# Reports auf eigener Origin (Sicherheit, siehe 4b); derselbe Container entscheidet anhand des Host-Headers
+reports.breakbar.cc {
+    encode zstd gzip
+    reverse_proxy 127.0.0.1:4100
+}
 ```
+
+DNS: A/AAAA-Einträge für **`logs.breakbar.cc`** und **`reports.breakbar.cc`** auf die VPS-IP. Caddy holt für beide automatisch Zertifikate.
 
 Ziel-Inhalt von `/etc/caddy/Caddyfile` (aktuell steht dort nur der voidlog-Block):
 
