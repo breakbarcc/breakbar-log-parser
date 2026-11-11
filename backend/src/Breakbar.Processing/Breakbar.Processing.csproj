@@ -1,0 +1,23 @@
+<Project Sdk="Microsoft.NET.Sdk">
+
+  <!--
+    All access to Elite Insights goes through this project (EliteInsights/EliteInsightsAdapter.cs).
+    Only the EI libraries are referenced - not GW2EIParserCommons, whose System.Configuration based
+    settings crash on headless Linux (see docs/PLAN.md, section 6b).
+  -->
+
+  <ItemGroup>
+    <ProjectReference Include="$(EliteInsightsRoot)GW2EI.Library\GW2EI.Services\GW2EIEvtcParser\GW2EIEvtcParser.csproj" />
+    <ProjectReference Include="$(EliteInsightsRoot)GW2EI.Library\GW2EI.Services\GW2EIBuilders\GW2EIBuilders.csproj" />
+    <ProjectReference Include="$(EliteInsightsRoot)GW2EI.Library\GW2EI.Repositories\GW2EIGW2API\GW2EIGW2API.csproj" />
+  </ItemGroup>
+
+  <!-- GW2 API caches shipped with EI (skills, specs, maps). Without them EI would query the GW2 API at startup. -->
+  <ItemGroup>
+    <Content Include="$(EliteInsightsRoot)GW2EI.Library\GW2EI.Services\GW2EIParserCommons\Content\SkillList.json;$(EliteInsightsRoot)GW2EI.Library\GW2EI.Services\GW2EIParserCommons\Content\SpecList.json;$(EliteInsightsRoot)GW2EI.Library\GW2EI.Services\GW2EIParserCommons\Content\MapList.json">
+      <Link>EliteInsightsContent\%(Filename)%(Extension)</Link>
+      <CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory>
+    </Content>
+  </ItemGroup>
+
+</Project>

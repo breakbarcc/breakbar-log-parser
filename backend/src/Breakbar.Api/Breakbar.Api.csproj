@@ -1,0 +1,7 @@
+<Project Sdk="Microsoft.NET.Sdk.Web">
+
+  <ItemGroup>
+    <ProjectReference Include="..\Breakbar.Processing\Breakbar.Processing.csproj" />
+  </ItemGroup>
+
+</Project>

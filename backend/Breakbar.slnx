@@ -1,0 +1,18 @@
+<Solution>
+  <Folder Name="/src/">
+    <Project Path="src/Breakbar.Api/Breakbar.Api.csproj" />
+    <Project Path="src/Breakbar.Processing/Breakbar.Processing.csproj" />
+  </Folder>
+  <Folder Name="/tests/">
+    <Project Path="tests/Breakbar.Processing.Tests/Breakbar.Processing.Tests.csproj" />
+  </Folder>
+  <Folder Name="/tools/">
+    <Project Path="tools/Breakbar.ParseSpike/Breakbar.ParseSpike.csproj" />
+  </Folder>
+  <Folder Name="/external (Elite Insights, submodule)/">
+    <Project Path="../external/GW2-Elite-Insights-Parser/GW2EI.Library/GW2EI.Models/GW2EIJSON/GW2EIJSON.csproj" />
+    <Project Path="../external/GW2-Elite-Insights-Parser/GW2EI.Library/GW2EI.Repositories/GW2EIGW2API/GW2EIGW2API.csproj" />
+    <Project Path="../external/GW2-Elite-Insights-Parser/GW2EI.Library/GW2EI.Services/GW2EIBuilders/GW2EIBuilders.csproj" />
+    <Project Path="../external/GW2-Elite-Insights-Parser/GW2EI.Library/GW2EI.Services/GW2EIEvtcParser/GW2EIEvtcParser.csproj" />
+  </Folder>
+</Solution>
