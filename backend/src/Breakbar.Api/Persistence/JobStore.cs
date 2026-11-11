@@ -54,6 +54,7 @@ public sealed class JobView
     public required string UserId { get; init; }
     public string? BatchId { get; init; }
     public required string FileName { get; init; }
+    public long FileBytes { get; init; }
     public required string Status { get; init; }
     public required string ReportId { get; init; }
     public bool Anonymized { get; init; }
@@ -71,7 +72,7 @@ public sealed class JobView
 public sealed class JobStore(Database database, TimeProvider time)
 {
     private const string ViewSelect = """
-        SELECT j.id, j.user_id, j.batch_id, j.file_name, j.status, j.report_id, j.error,
+        SELECT j.id, j.user_id, j.batch_id, j.file_name, j.file_bytes, j.status, j.report_id, j.error,
                j.anonymized, j.created_at, j.started_at, j.finished_at,
                r.encounter_id, r.log_name, r.encounter_success, r.duration_ms
         FROM jobs j

@@ -7,6 +7,7 @@ namespace Breakbar.Api.Jobs;
 public sealed record JobDto(
     string Id,
     string FileName,
+    long FileBytes,
     string Status,
     int? Position,
     string? BatchId,
@@ -28,6 +29,7 @@ public sealed record JobDto(
         return new JobDto(
             job.Id,
             job.FileName,
+            job.FileBytes,
             job.Status,
             job.Status == JobStatus.Queued ? position : null,
             job.BatchId,
