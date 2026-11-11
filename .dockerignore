@@ -1,0 +1,20 @@
+# Keep the build context small; only frontend/, backend/ and external/ are needed.
+.git
+**/.git
+.github
+.claude
+.vs
+.idea
+docs
+benchmark
+deploy
+**/bin
+**/obj
+**/node_modules
+**/TestResults
+frontend/dist
+backend/src/Breakbar.Api/wwwroot
+backend/src/Breakbar.Api/data
+*.db
+*.db-shm
+*.db-wal

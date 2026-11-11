@@ -1,0 +1,23 @@
+# Site blocks for breakbar-logs. Included from /etc/caddy/Caddyfile with:
+#   import /srv/breakbar-logs/deploy/logs.caddy
+# Caddy obtains TLS certificates for both names automatically (DNS A/AAAA records must point to the VPS).
+
+# App and API
+logs.breakbar.cc {
+	encode zstd gzip
+
+	request_body {
+		max_size 200MB
+	}
+
+	reverse_proxy 127.0.0.1:4100 {
+		# Server-Sent Events (/api/events) must reach the browser immediately
+		flush_interval -1
+	}
+}
+
+# Reports on their own origin (security, docs/PLAN.md 4b). Same container; the app routes by Host header.
+reports.breakbar.cc {
+	encode zstd gzip
+	reverse_proxy 127.0.0.1:4100
+}

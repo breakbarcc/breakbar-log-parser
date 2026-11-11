@@ -4,3 +4,7 @@
 *.ps1 text eol=crlf
 *.evtc binary
 *.zevtc binary
+Dockerfile text eol=lf
+*.yml text eol=lf
+*.caddy text eol=lf
+.env.example text eol=lf

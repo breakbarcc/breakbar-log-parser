@@ -24,3 +24,6 @@ Thumbs.db
 
 # Frontend build output served by the API (built from frontend/)
 /backend/src/Breakbar.Api/wwwroot/
+
+# Secrets on the VPS
+deploy/.env
