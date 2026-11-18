@@ -25,6 +25,13 @@ export function formatDuration(ms: number): string {
   return h > 0 ? `${h}:${String(m).padStart(2, '0')}:${ss}` : `${m}:${ss}`
 }
 
+const dayFormat = new Intl.DateTimeFormat('de-DE', { day: '2-digit', month: '2-digit' })
+
+/** "25.11." for the day an ISO timestamp falls on (browser time zone). */
+export function formatDay(iso: string): string {
+  return dayFormat.format(new Date(iso)) // de-DE already ends with a dot: "25.11."
+}
+
 /** Absolute URL for sharing; report URLs from the API may be relative in development. */
 export function absoluteUrl(url: string): string {
   return new URL(url, window.location.origin).toString()

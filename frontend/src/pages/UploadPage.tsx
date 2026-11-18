@@ -2,6 +2,7 @@ import { useCallback, useEffect, useId, useRef } from 'react'
 import { useLocation, useNavigate } from 'react-router'
 import { FolderIcon, GitHubIcon, HeartIcon, UploadIcon } from '../components/icons'
 import { EI_REPO } from '../components/links'
+import { REPORT_RETENTION_DAYS } from '../lib/retention'
 import { useUploads } from '../lib/uploads'
 import { useAnonymizeSetting, useFileDrop } from '../lib/useFileDrop'
 
@@ -98,7 +99,9 @@ export function UploadPage() {
             />
             Spielernamen anonymisieren
           </label>
-          <span className="text-sm text-faint">Berichte sind für jeden sichtbar, der den Link hat.</span>
+          <span className="text-sm text-faint">
+            Berichte sind für jeden sichtbar, der den Link hat, und werden nach {REPORT_RETENTION_DAYS} Tagen automatisch gelöscht.
+          </span>
         </div>
       </section>
 

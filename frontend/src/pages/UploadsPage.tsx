@@ -2,7 +2,8 @@ import { useCallback, useState } from 'react'
 import { Link } from 'react-router'
 import { CheckIcon, CopyIcon, ExternalIcon, LinkIcon, PlusIcon, UploadIcon } from '../components/icons'
 import { EI_REPO } from '../components/links'
-import { absoluteUrl, formatBytes, formatDuration } from '../lib/format'
+import { absoluteUrl, formatBytes, formatDay, formatDuration } from '../lib/format'
+import { REPORT_RETENTION_DAYS } from '../lib/retention'
 import { summarize, summaryText, type Row, type RowState } from '../lib/rows'
 import { useUploads } from '../lib/uploads'
 import { useAnonymizeSetting, useFileDrop } from '../lib/useFileDrop'
@@ -72,6 +73,7 @@ function ResultCell({ row }: { row: Row }) {
           {job.durationMs != null && <> · {formatDuration(job.durationMs)}</>}
           {job.anonymized && <> · anonymisiert</>}
         </span>
+        {job.expiresAt && <span className="text-[13px] text-faint">Link gültig bis {formatDay(job.expiresAt)}</span>}
       </div>
     )
   }
@@ -92,7 +94,7 @@ function ResultCell({ row }: { row: Row }) {
       case 'cancelled':
         return 'Abgebrochen'
       case 'expired':
-        return 'Bericht wurde gelöscht (Speicherplatz). Lade den Log erneut hoch, um ihn neu zu erzeugen.'
+        return `Bericht wurde nach ${REPORT_RETENTION_DAYS} Tagen automatisch gelöscht. Lade den Log erneut hoch, um ihn neu zu erzeugen.`
       default:
         return null
     }
@@ -237,8 +239,8 @@ export function UploadsPage() {
       </div>
 
       <p className="m-0 text-sm text-faint">
-        Berichte liegen unter <span className="font-mono text-text-2">reports.breakbar.cc/r/…</span> und sind für jeden sichtbar, der den Link hat.
-        Erzeugt mit <a href={EI_REPO}>GW2 Elite Insights</a>.
+        Berichte liegen unter <span className="font-mono text-text-2">reports.breakbar.cc/r/…</span>, sind für jeden sichtbar, der den Link hat, und werden
+        nach {REPORT_RETENTION_DAYS} Tagen automatisch gelöscht. Erzeugt mit <a href={EI_REPO}>GW2 Elite Insights</a>.
       </p>
     </div>
   )

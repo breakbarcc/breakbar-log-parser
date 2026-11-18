@@ -21,6 +21,8 @@ export interface Job {
   error: string | null
   createdAt: string
   finishedAt: string | null
+  /** When the report is deleted (retention), set once the job is done. */
+  expiresAt: string | null
 }
 
 /** Largest upload the server accepts (Uploads:MaxUploadBytes). */

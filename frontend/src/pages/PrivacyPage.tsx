@@ -1,12 +1,12 @@
 import type { ReactNode } from 'react'
 import { IMPRESSUM_URL } from '../components/links'
+import { REPORT_RETENTION_DAYS } from '../lib/retention'
 
 // Datenschutzerklärung für logs.breakbar.cc und reports.breakbar.cc.
 // Sie beschreibt, was die Anwendung tatsächlich tut (docs/PLAN.md 4b, 6a). Wer die Anwendung ändert
 // (neue Cookies, Dienste, Speicherdauer, Drittanbieter in den Berichten), muss diesen Text mitändern.
 
-const REPORT_RETENTION_DAYS = 7
-const UPDATED = '11.11.2026'
+const UPDATED = '18.11.2026'
 
 function Section({ title, children }: { title: string; children: ReactNode }) {
   return (
@@ -93,7 +93,7 @@ export function PrivacyPage() {
         <P>
           <strong>Speicherdauer:</strong> Die hochgeladene Originaldatei wird gelöscht, sobald die Auswertung abgeschlossen ist oder
           fehlschlägt. Der Bericht und die zugehörigen Verwaltungsdaten werden <strong>spätestens {REPORT_RETENTION_DAYS} Tage nach ihrer
-          Erstellung</strong> automatisch gelöscht, ebenso aus Sicherungskopien. Danach ist der Link nicht mehr erreichbar.
+          Erstellung</strong> automatisch gelöscht; gelöschte Datenbankeinträge werden dabei überschrieben. Wir legen keine Sicherungskopien von Berichten oder Upload-Daten an. Danach ist der Link nicht mehr erreichbar.
         </P>
         <P>
           <strong>Wer kann Berichte sehen?</strong> Jeder, der den Link kennt. Die Adresse enthält eine zufällige Kennung und ist nicht zu

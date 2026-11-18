@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest'
 import type { Job } from './api'
-import { formatBytes, formatDuration, isLogFile } from './format'
+import { formatBytes, formatDay, formatDuration, isLogFile } from './format'
 import { buildRows, summarize, summaryText, upsertJob, type LocalUpload } from './rows'
 
 const job = (id: string, status: Job['status'], createdAt: string): Job => ({
@@ -21,6 +21,7 @@ const job = (id: string, status: Job['status'], createdAt: string): Job => ({
   error: null,
   createdAt,
   finishedAt: null,
+  expiresAt: null,
 })
 
 const local = (localId: string, state: LocalUpload['state']): LocalUpload => ({
@@ -75,6 +76,10 @@ describe('format', () => {
     expect(formatBytes(512 * 1024)).toBe('512 KB')
     expect(formatDuration(192_000)).toBe('3:12')
     expect(formatDuration(3_725_000)).toBe('1:02:05')
+  })
+
+  it('formats the expiry day', () => {
+    expect(formatDay('2026-11-25T12:00:00Z')).toBe('25.11.')
   })
 
   it('accepts only log files', () => {
