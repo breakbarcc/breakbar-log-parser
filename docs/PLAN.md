@@ -221,7 +221,7 @@ Browser ──HTTPS──► Caddy (TLS, zstd/gzip)
                                  ├─ GET /api/events (SSE: Status + Wartepositionen)
                                  ├─ SQLite (Jobs, Reports)
                                  ├─ /r/{id}, /ei-assets/*, Frontend (Dateien von Disk)
-                                 └─ Cleanup-HostedService (Retention, Schritt 6)
+                                 └─ RetentionService (löscht alles nach 7 Tagen)
 Disk:  data/uploads (temporär) · data/reports/{id}/report.html, report.json.gz · data/ei-assets · data/breakbar.db
 ```
 
@@ -265,7 +265,7 @@ Code: `backend/src/Breakbar.Api/`. Alle Antworten JSON, Job-IDs 32 Hex-Zeichen, 
 - **SQLite** (`data/breakbar.db`, WAL): Tabellen `jobs` und `reports`; alle SQL-Befehle in `Persistence/JobStore.cs` (Dapper). Beim Start werden Jobs mit Status `queued`/`running` wieder eingereiht.
 - **Status eines Jobs:** `queued` → `running` → `done` | `failed`, oder `cancelled`.
 - **Limits beim Upload:** max. 300 wartende Jobs pro User (Dienste ausgenommen), max. 3000 wartende Jobs insgesamt, keine Uploads bei < 5 GB freiem Platz (`Uploads:*`).
-- Noch nicht umgesetzt: Retention/Quota (Schritt 6), Admin-Seite, Abruf über vorsignierte R2-URLs für voidlog.
+- Retention (7 Tage) und Quota sind umgesetzt, siehe 6b/4c. Noch nicht umgesetzt: Admin-Seite, Abruf über vorsignierte R2-URLs für voidlog.
 
 ## 4b. Sicherheit (Stand 2026-11-11)
 
@@ -291,7 +291,7 @@ Was sie beschreibt, und woran man den Text koppeln muss:
 - **Keine Analyse, kein Tracking.** Die App lädt nichts von Dritten; Schriften sind selbst gehostet (kein Google Fonts in der App).
 - **Cookie `bb_uid`** (zufällige Kennung, host-only, HttpOnly, Secure, 1 Jahr; § 25 Abs. 2 Nr. 2 TDDDG) und zwei `localStorage`-Schlüssel (`breakbar.anonymize`, `breakbar.dismissedJobs`). Das Sprach-Cookie der Hauptseite (`breakbar-language`, gilt für alle Subdomains) wird mitgesendet, aber nicht gelesen. Neue Cookies oder Speicherschlüssel → Erklärung ändern.
 - **IP-Adresse:** nur im Speicher für das Upload-Limit, kein Zugriffslog (die App loggt Anfragen nicht, `deploy/logs.caddy` hat keine `log`-Direktive). Der VPS-Anbieter ist als Auftragsverarbeiter genannt, aber noch nicht namentlich.
-- **Logs und Berichte:** enthalten Charakter- und Accountnamen auch von Mitspielern (Art. 6 Abs. 1 lit. b und f DSGVO, Option „Spielernamen anonymisieren“). Originaldatei wird nach der Auswertung gelöscht. **Berichte und Verwaltungsdaten: höchstens 7 Tage**, auch aus Backups – **zugesagt, aber noch nicht umgesetzt** (siehe nächster Schritt in Abschnitt 7).
+- **Logs und Berichte:** enthalten Charakter- und Accountnamen auch von Mitspielern (Art. 6 Abs. 1 lit. b und f DSGVO, Option „Spielernamen anonymisieren“). Originaldatei wird nach der Auswertung gelöscht. **Berichte und Verwaltungsdaten: höchstens 7 Tage**, keine Sicherungskopien – umgesetzt in Schritt 6c (`RetentionService`, `Retention:ReportDays`, gemeinsame Konstante `REPORT_RETENTION_DAYS` im Frontend). Ändert man die Dauer, müssen Einstellung, Konstante und Erklärung gemeinsam angepasst werden.
 - **Berichtsseiten laden Inhalte von Dritten nach** (EI-Vorlage): Google Fonts (`fonts.googleapis.com`/`fonts.gstatic.com`), cdnjs (Cloudflare), jsDelivr, code.jquery.com, cdn.plot.ly, Bilder von `render.guildwars2.com`/`wiki.guildwars2.com`, Ersatzquellen imgur/DuckDuckGo-Proxy/darthmaim/gw2dat. Dabei geht die IP des Besuchers an diese Anbieter. Die Erklärung benennt das offen. Beseitigen ließe es sich nur, indem der Adapter diese Dateien selbst ausliefert (Bibliotheken vendorn, Schrift lokal, Bild-Hosts in der CSP der Berichts-Origin begrenzen); Bilder von ArenaNet bleiben auch dann extern, es sei denn, man hostet die Symbole selbst.
 - Pflege: Wer Speicherdauer, Cookies, Dienste oder Drittanbieter ändert, ändert `PrivacyPage.tsx` (Konstante `REPORT_RETENTION_DAYS`, Datum `UPDATED`) im selben Commit.
 
@@ -406,7 +406,7 @@ Wartbarkeits-Prinzipien:
 
 Gründe für die Platte zum Start:
 1. Beide Ziele (Performance, Wartbarkeit) sprechen bei der zu erwartenden Last für die Platte. Die Report-Auslieferung durch Caddy kostet den VPS fast nichts.
-2. **Klare Zuständigkeit:** Für Logs aus voidlog ist **voidlog** für die dauerhafte Speicherung zuständig (es nutzt R2 bereits). Der Parser liefert JSON/HTML zurück, voidlog legt sie in R2 ab. Der Parser hält diese Ergebnisse nur kurz vor (Cache, z. B. 7 Tage). Nur öffentliche Uploads auf `logs.breakbar.cc` werden länger auf der Platte gehalten (Quota, älteste zuerst löschen).
+2. **Klare Zuständigkeit:** Für Logs aus voidlog ist **voidlog** für die dauerhafte Speicherung zuständig (es nutzt R2 bereits). Der Parser liefert JSON/HTML zurück, voidlog legt sie in R2 ab. Der Parser hält diese Ergebnisse nur kurz vor. **Alle** Berichte, auch die öffentlichen Uploads auf `logs.breakbar.cc`, werden nach höchstens 7 Tagen gelöscht (Datenschutz, Abschnitt 4c); das 60-GB-Limit ist nur noch eine Sicherung gegen volle Platten.
 3. Rohe EVTC-Dateien werden nach dem Parsen gelöscht. Für voidlog-Logs liegen sie ohnehin schon in R2.
 
 Für später vorbereitet:
@@ -471,7 +471,7 @@ Anleitung Schritt für Schritt: [deploy/README.md](../deploy/README.md).
 - **CI/CD:** `.github/workflows/ci.yml` testet Frontend und Backend bei jedem Push/PR und veröffentlicht bei Pushes auf `main` das Image als `ghcr.io/breakbarcc/breakbar-log-parser:latest` (und `:sha-<commit>` für Rollbacks). Der VPS baut nicht selbst, er lädt nur das Image – kein Compiler-Lauf neben voidlog.
 - **Compose:** `deploy/docker-compose.yml` – Port nur auf `127.0.0.1:4100`, Bind-Mount `/srv/breakbar-logs/data`, `mem_limit: 2800m`, `cpus: 2`, `cpu_shares: 512` (voidlog hat bei Konkurrenz Vorrang), Log-Rotation. Secrets (API-Key für voidlog) in `deploy/.env`.
 - **Proxy-Header:** Caddy erreicht den Container über die Docker-Bridge, nicht über Loopback. `ForwardedHeaders__TrustAllProxies=true` im Image sorgt dafür, dass Client-IP (Rate-Limit) und HTTPS (Secure-Cookie) trotzdem ankommen. Sicher nur, weil der Port ausschließlich auf 127.0.0.1 veröffentlicht ist.
-- **Aufbewahrung:** `RetentionService` (stündlich): Berichte über 60 GB → älteste löschen bis 90 %, Berichte nur für voidlog nach 7 Tagen löschen, verwaiste Dateien entfernen. Jobs gelöschter Berichte stehen auf „Abgelaufen“.
+- **Aufbewahrung** (`RetentionService`, alle 15 Minuten): **alle** Berichte und alle abgeschlossenen Job-Einträge werden nach 7 Tagen gelöscht (`Retention:ReportDays`), und zwar bis zu 15 Minuten früher, damit die Frist nie überschritten wird. Zusätzlich: Berichte über 60 GB → älteste früher löschen bis 90 %, verwaiste Dateien entfernen. Wartende und laufende Jobs bleiben. Ein Job, der auf einen gelöschten (älteren) Bericht zeigt, steht auf „Abgelaufen“. SQLite überschreibt gelöschte Zeilen (`secure_delete`). Die Liste zeigt „Link gültig bis dd.mm.“.
 - **Datenbank:** Schema-Version 1 (`PRAGMA user_version`); spätere Änderungen nur noch als Migration in `Persistence/Database.cs`.
 - Der früher erwähnte beschreibbare `HOME`-Ordner ist nicht nötig, weil der Dienst `GW2EIParserCommons` nicht nutzt.
 
@@ -488,7 +488,7 @@ Anleitung Schritt für Schritt: [deploy/README.md](../deploy/README.md).
 | 4 | API: Upload, Dedupe, Jobs in SQLite, SSE-Status, Report-Auslieferung | End-to-End per curl geprüft, 10 Integrationstests; siehe 4a | ✅ 2026-11-11 |
 | 5 | Frontend: Multi-Upload mit Fortschritt, Batch-Ansicht, Links | `frontend/`, im Browser geprüft; siehe 5a | ✅ 2026-11-11 |
 | 6 | Deploy: Dockerfile, Caddy, Volumes, Retention-Job, Rate-Limits | vorbereitet (Image, CI, Compose, Caddy, Anleitung, Aufbewahrung); Ausrollen auf dem VPS offen | 🟡 2026-11-11 |
-| **6c** | **Nächster Task:** Aufbewahrung höchstens **7 Tage** für **alle** Berichte und Job-Daten (auch aus Backups), weil die Datenschutzerklärung es bereits zusagt; siehe 4c | `RetentionService` mit `Retention:ReportDays`, Job-Zeilen löschen, Tests, Backup-Anleitung anpassen | **offen – vor dem Livegang** |
+| 6c | Aufbewahrung höchstens **7 Tage** für **alle** Berichte und Job-Daten, ohne Sicherungskopien (Datenschutzerklärung, siehe 4c) | `RetentionService`, „gültig bis“ im Frontend, Tests, Backup-Anleitung angepasst | ✅ 2026-11-18 |
 | 7 | Feinschliff: RAM-Schätzung aus echten Messwerten nachjustieren, DRR-Gewichtung, Metriken (`/health`, Queue-Länge) | Optimierung nach Messwerten | offen |
 
 ---
@@ -496,7 +496,7 @@ Anleitung Schritt für Schritt: [deploy/README.md](../deploy/README.md).
 ## 8. Offene Fragen
 
 1. ~~VPS-Daten, Subdomain, Reverse-Proxy~~ → geklärt (1b, Abschnitt 6b): Caddy auf dem Host, `logs.breakbar.cc`.
-2. **Aufbewahrung:** Wie lange sollen Reports gespeichert bleiben? Vorschlag: Quota (z. B. 60 GB), älteste Reports werden zuerst gelöscht.
+2. ~~Aufbewahrung~~ → entschieden: 7 Tage für alles (Abschnitt 4c).
 3. **Sichtbarkeit:** Reports öffentlich per unratbarer URL (wie dps.report) oder nur für den Uploader?
 4. **Login** später nötig (z. B. Discord-OAuth für „meine Reports“) oder reicht anonymes Token?
 5. **Erwartete Last:** Wie viele User gleichzeitig / Logs pro Abend?

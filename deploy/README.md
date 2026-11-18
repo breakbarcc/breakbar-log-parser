@@ -95,7 +95,7 @@ Dann im Browser `https://logs.breakbar.cc` öffnen und einen Log hochladen.
   sudo fallocate -l 3G /swapfile && sudo chmod 600 /swapfile && sudo mkswap /swapfile && sudo swapon /swapfile
   echo '/swapfile none swap sw 0 0' | sudo tee -a /etc/fstab
   ```
-- **Vor dem öffentlichen Start:** Die Datenschutzerklärung (`frontend/src/pages/PrivacyPage.tsx`) verspricht, dass Berichte und Verwaltungsdaten **höchstens 7 Tage** gespeichert werden. Das muss technisch umgesetzt sein (Plan, Abschnitt 4c), und die Backup-Empfehlung unten muss dazu passen. Das Impressum liegt auf `www.breakbar.cc/de/impressum`.
+- **Datenschutz:** Die Datenschutzerklärung (`frontend/src/pages/PrivacyPage.tsx`, Plan Abschnitt 4c) verspricht **höchstens 7 Tage** Speicherung und **keine Sicherungskopien** von Berichten und Upload-Daten. Der Dienst löscht selbst (`Retention__ReportDays`, Standard 7); erhöhe den Wert nie, ohne die Erklärung zu ändern. Das Impressum liegt auf `www.breakbar.cc/de/impressum`.
 
 ## Update
 
@@ -121,11 +121,6 @@ docker stats breakbar-logs-app-1                                  # CPU/RAM
 du -sh /srv/breakbar-logs/data/*                                  # Speicher
 ```
 
-**Backup** (Datenbank im laufenden Betrieb, Berichte als Dateien):
+**Backup: bewusst keines für `data/`.** Berichte und Upload-Daten sind flüchtig (höchstens 7 Tage, siehe Datenschutzerklärung, die Sicherungskopien ausschließt). Bei einem Plattendefekt gehen nur die Berichte der letzten Tage verloren; Logs lassen sich neu hochladen, und voidlog speichert seine eigenen Ergebnisse selbst in R2. Sichere stattdessen nur, was nicht flüchtig ist: `deploy/.env` (API-Key) und die Konfiguration im Git.
 
-```bash
-sqlite3 /srv/breakbar-logs/data/breakbar.db ".backup '/root/breakbar-$(date +%F).db'"
-rsync -a /srv/breakbar-logs/data/reports/ <backup-ziel>/reports/
-```
-
-Ohne Backup gehen bei einem Plattendefekt die Berichte öffentlicher Uploads verloren (voidlog speichert seine eigenen Ergebnisse selbst in R2).
+Achtung bei Snapshots des Hosters (z. B. des gesamten VPS): Sie enthalten auch `data/` und widersprechen der Aussage „keine Sicherungskopien“, wenn sie länger als 7 Tage aufbewahrt werden. Entweder automatische Snapshots auf 7 Tage begrenzen oder den Satz in der Datenschutzerklärung anpassen.
