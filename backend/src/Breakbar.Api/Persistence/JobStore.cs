@@ -69,6 +69,7 @@ public sealed class JobView
     public string? LogName { get; init; }
     public bool? EncounterSuccess { get; init; }
     public long? DurationMs { get; init; }
+    public long? ReportCreatedAt { get; init; }
 }
 
 /// <summary>All SQL for jobs and reports. Times are Unix milliseconds (UTC).</summary>
@@ -77,7 +78,7 @@ public sealed class JobStore(Database database, TimeProvider time)
     private const string ViewSelect = """
         SELECT j.id, j.user_id, j.batch_id, j.file_name, j.file_bytes, j.status, j.report_id, j.error,
                j.anonymized, j.created_at, j.started_at, j.finished_at,
-               r.encounter_id, r.log_name, r.encounter_success, r.duration_ms
+               r.encounter_id, r.log_name, r.encounter_success, r.duration_ms, r.created_at AS report_created_at
         FROM jobs j
         LEFT JOIN reports r ON r.id = j.report_id AND j.status = 'done'
         """;
@@ -188,15 +189,17 @@ public sealed class JobStore(Database database, TimeProvider time)
         return db.Query<ReportRecord>("SELECT * FROM reports ORDER BY created_at LIMIT @limit", new { limit }).AsList();
     }
 
-    /// <summary>Reports older than the cutoff that no browser user (only service clients like voidlog) asked for.</summary>
-    public IReadOnlyList<ReportRecord> ListServiceOnlyReportsBefore(long cutoff)
+    public IReadOnlyList<ReportRecord> ListReportsBefore(long cutoff)
     {
         using var db = database.Open();
-        return db.Query<ReportRecord>("""
-            SELECT r.* FROM reports r
-            WHERE r.created_at < @cutoff
-              AND NOT EXISTS (SELECT 1 FROM jobs j WHERE j.report_id = r.id AND j.user_id NOT LIKE 'svc:%')
-            """, new { cutoff }).AsList();
+        return db.Query<ReportRecord>("SELECT * FROM reports WHERE created_at < @cutoff", new { cutoff }).AsList();
+    }
+
+    /// <summary>Deletes job records created before the cutoff, except waiting and running ones. Returns how many.</summary>
+    public int DeleteFinishedJobsBefore(long cutoff)
+    {
+        using var db = database.Open();
+        return db.Execute("DELETE FROM jobs WHERE created_at < @cutoff AND status NOT IN ('queued', 'running')", new { cutoff });
     }
 
     /// <summary>Removes a report row and marks the jobs that pointed to it as expired.</summary>

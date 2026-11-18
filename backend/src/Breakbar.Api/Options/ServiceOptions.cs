@@ -50,21 +50,34 @@ public sealed class ReportsOptions
     public string? Host => string.IsNullOrWhiteSpace(BaseUrl) ? null : new Uri(BaseUrl).Host;
 
     public string ReportUrl(string reportId) => $"{BaseUrl?.TrimEnd('/')}/r/{reportId}";
+
+    /// <summary>How many days a report stays available (shown to users as "gültig bis"). Set from <see cref="RetentionOptions.ReportDays"/> at startup.</summary>
+    public int ValidDays { get; set; } = 7;
 }
 
-/// <summary>How long reports are kept (docs/PLAN.md 6a). Checked by RetentionService.</summary>
+/// <summary>
+/// How long data is kept (docs/PLAN.md 4c, 6a). Checked by RetentionService.
+/// The privacy policy (frontend/src/pages/PrivacyPage.tsx) promises at most 7 days: do not raise
+/// <see cref="ReportDays"/> without changing the policy first.
+/// </summary>
 public sealed class RetentionOptions
 {
-    /// <summary>When reports use more than this, the oldest are deleted until 90 % of it is left.</summary>
+    /// <summary>Reports and the job records of every user are deleted after this many days (at least 1).</summary>
+    public int ReportDays { get; set; } = 7;
+
+    /// <summary>
+    /// Safety net: when reports use more than this, the oldest are deleted earlier, until 90 % of it is left.
+    /// </summary>
     public long MaxReportsBytes { get; set; } = 60L * 1024 * 1024 * 1024;
 
     /// <summary>
-    /// Reports only service clients (voidlog) asked for are deleted after this many days:
-    /// voidlog stores the results itself. 0 disables it.
+    /// How often retention runs. Data is deleted up to this much earlier than <see cref="ReportDays"/>,
+    /// so that it is never kept longer than promised.
     /// </summary>
-    public int ServiceClientReportDays { get; set; } = 7;
+    public TimeSpan Interval { get; set; } = TimeSpan.FromMinutes(15);
 
-    public TimeSpan Interval { get; set; } = TimeSpan.FromHours(1);
+    /// <summary>Age at which data is deleted: the retention period minus one check interval.</summary>
+    public TimeSpan DeleteAfter => TimeSpan.FromDays(Math.Max(1, ReportDays)) - Interval;
 }
 
 /// <summary>Trusted service clients (e.g. voidlog) authenticated by the X-Api-Key header. Key: client name, value: API key.</summary>

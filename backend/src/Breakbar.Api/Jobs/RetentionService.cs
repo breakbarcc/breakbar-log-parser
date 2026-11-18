@@ -4,11 +4,13 @@ using Breakbar.Api.Persistence;
 namespace Breakbar.Api.Jobs;
 
 /// <summary>
-/// Keeps the data disk within limits (docs/PLAN.md 6a), once at startup and then every <see cref="RetentionOptions.Interval"/>:
-/// 1. deletes reports only service clients (voidlog) asked for after <see cref="RetentionOptions.ServiceClientReportDays"/>,
-/// 2. deletes the oldest reports while all reports use more than <see cref="RetentionOptions.MaxReportsBytes"/> (down to 90 %),
-/// 3. removes files nothing refers to any more (uploads of finished jobs, report folders after a crash).
-/// Jobs of deleted reports become "expired".
+/// Enforces the retention promised in the privacy policy (docs/PLAN.md 4c), once at startup and then every
+/// <see cref="RetentionOptions.Interval"/>:
+/// 1. deletes every report older than <see cref="RetentionOptions.ReportDays"/> days, for all users,
+/// 2. deletes the job records (file name, hash, browser id ...) of that age; waiting and running jobs stay,
+/// 3. as a safety net deletes the oldest reports while all reports use more than <see cref="RetentionOptions.MaxReportsBytes"/>,
+/// 4. removes files nothing refers to any more (uploads of finished jobs, report folders after a crash).
+/// A job that is younger than its report (same file uploaded again later) becomes "expired" when the report goes.
 /// </summary>
 public sealed partial class RetentionService(
     JobStore store,
@@ -41,15 +43,13 @@ public sealed partial class RetentionService(
     {
         int deleted = 0;
 
-        if (options.ServiceClientReportDays > 0)
+        long cutoff = (time.GetUtcNow() - options.DeleteAfter).ToUnixTimeMilliseconds();
+        foreach (var report in store.ListReportsBefore(cutoff))
         {
-            long cutoff = time.GetUtcNow().AddDays(-options.ServiceClientReportDays).ToUnixTimeMilliseconds();
-            foreach (var report in store.ListServiceOnlyReportsBefore(cutoff))
-            {
-                Delete(report.Id);
-                deleted++;
-            }
+            Delete(report.Id);
+            deleted++;
         }
+        int jobs = store.DeleteFinishedJobsBefore(cutoff);
 
         long used = store.GetReportsBytes();
         if (used > options.MaxReportsBytes)
@@ -76,9 +76,9 @@ public sealed partial class RetentionService(
         }
 
         int orphans = DeleteOrphans();
-        if (deleted > 0 || orphans > 0)
+        if (deleted > 0 || jobs > 0 || orphans > 0)
         {
-            LogRetentionDone(deleted, orphans, store.GetReportsBytes() / (1024 * 1024));
+            LogRetentionDone(deleted, jobs, orphans, store.GetReportsBytes() / (1024 * 1024));
         }
     }
 
@@ -129,8 +129,8 @@ public sealed partial class RetentionService(
         }
     }
 
-    [LoggerMessage(Level = LogLevel.Information, Message = "Retention deleted {Reports} reports and {Orphans} orphaned files; reports now use {UsedMb} MB")]
-    private partial void LogRetentionDone(int reports, int orphans, long usedMb);
+    [LoggerMessage(Level = LogLevel.Information, Message = "Retention deleted {Reports} reports, {Jobs} job records and {Orphans} orphaned files; reports now use {UsedMb} MB")]
+    private partial void LogRetentionDone(int reports, int jobs, int orphans, long usedMb);
 
     [LoggerMessage(Level = LogLevel.Warning, Message = "Retention run failed")]
     private partial void LogRetentionFailed(Exception exception);

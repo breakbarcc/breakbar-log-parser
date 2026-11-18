@@ -29,7 +29,7 @@ public sealed class Database
     {
         var connection = new SqliteConnection(_connectionString);
         connection.Open();
-        connection.Execute("PRAGMA busy_timeout = 5000; PRAGMA synchronous = NORMAL;");
+        connection.Execute("PRAGMA busy_timeout = 5000; PRAGMA synchronous = NORMAL; PRAGMA secure_delete = ON;");
         return connection;
     }
 

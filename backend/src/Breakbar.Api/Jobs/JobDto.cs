@@ -21,7 +21,9 @@ public sealed record JobDto(
     long? DurationMs,
     string? Error,
     DateTimeOffset CreatedAt,
-    DateTimeOffset? FinishedAt)
+    DateTimeOffset? FinishedAt,
+    /// <summary>When the report is deleted (retention); null until the job is done.</summary>
+    DateTimeOffset? ExpiresAt)
 {
     public static JobDto From(JobView job, int? position, ReportsOptions reports)
     {
@@ -43,7 +45,8 @@ public sealed record JobDto(
             job.DurationMs,
             job.Error,
             DateTimeOffset.FromUnixTimeMilliseconds(job.CreatedAt),
-            job.FinishedAt is { } f ? DateTimeOffset.FromUnixTimeMilliseconds(f) : null);
+            job.FinishedAt is { } f ? DateTimeOffset.FromUnixTimeMilliseconds(f) : null,
+            done && job.ReportCreatedAt is { } created ? DateTimeOffset.FromUnixTimeMilliseconds(created).AddDays(reports.ValidDays) : null);
     }
 }
 

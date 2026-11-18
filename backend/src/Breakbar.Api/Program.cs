@@ -29,7 +29,9 @@ builder.Services.AddSingleton(eiOptions);
 builder.Services.AddSingleton(config.GetSection("Queue").Get<ParseQueueOptions>() ?? new ParseQueueOptions());
 builder.Services.AddSingleton(config.GetSection("Uploads").Get<UploadOptions>() ?? new UploadOptions());
 builder.Services.AddSingleton(config.GetSection("ServiceClients").Get<ServiceClientOptions>() ?? new ServiceClientOptions());
+var retention = config.GetSection("Retention").Get<RetentionOptions>() ?? new RetentionOptions();
 var reports = config.GetSection("Reports").Get<ReportsOptions>() ?? new ReportsOptions();
+reports.ValidDays = Math.Max(1, retention.ReportDays);
 builder.Services.AddSingleton(reports);
 builder.Services.AddSingleton(TimeProvider.System);
 
@@ -46,7 +48,7 @@ builder.Services.AddSingleton<IParseJobObserver>(sp => sp.GetRequiredService<Job
 builder.Services.AddSingleton<UploadService>();
 builder.Services.AddSingleton<UserIdentity>();
 builder.Services.AddHostedService<ParseWorkerPool>();
-builder.Services.AddSingleton(config.GetSection("Retention").Get<RetentionOptions>() ?? new RetentionOptions());
+builder.Services.AddSingleton(retention);
 builder.Services.AddSingleton<RetentionService>();
 builder.Services.AddHostedService(sp => sp.GetRequiredService<RetentionService>());
 
