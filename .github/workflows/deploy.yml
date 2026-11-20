@@ -31,7 +31,9 @@ jobs:
       VPS_HOST: ${{ vars.VPS_HOST }}
       VPS_USER: ${{ vars.VPS_USER || 'deploy' }}
       VPS_PORT: ${{ vars.VPS_PORT || '22' }}
-      APP_DIR: ${{ vars.VPS_APP_DIR || '/srv/breakbar-logs' }}
+      # Relative paths start in the home directory of the SSH user: apps/breakbar-logs = /home/deploy/apps/breakbar-logs,
+      # next to voidlog (apps/voidlog)
+      APP_DIR: ${{ vars.VPS_APP_DIR || 'apps/breakbar-logs' }}
     steps:
       - uses: actions/checkout@v4
         with:

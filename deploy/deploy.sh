@@ -3,12 +3,13 @@
 # Can also be run by hand, e.g. to roll back:  IMAGE_TAG=<older commit sha> bash deploy/deploy.sh
 #
 #   IMAGE_TAG    required  tag of the image breakbar-logs:<tag> that must already be loaded
-#   BREAKBAR_DIR optional  app directory (default /srv/breakbar-logs), contains deploy/ and data/
+#   BREAKBAR_DIR optional  app directory containing deploy/ and data/ (default: the parent of this script's folder,
+#                          e.g. /home/deploy/apps/breakbar-logs)
 #   KEEP_IMAGES  optional  how many older images to keep for rollbacks, besides the one being started (default 3)
 #   HEALTH_TIMEOUT optional seconds to wait for the health check (default 90)
 set -euo pipefail
 
-DIR="${BREAKBAR_DIR:-/srv/breakbar-logs}"
+DIR="${BREAKBAR_DIR:-$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)}"
 TAG="${IMAGE_TAG:?IMAGE_TAG is required (the commit sha of the image to run)}"
 KEEP="${KEEP_IMAGES:-3}"
 TIMEOUT="${HEALTH_TIMEOUT:-90}"

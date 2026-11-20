@@ -19,8 +19,9 @@ services:
     ports:
       - "127.0.0.1:4100:8080"
     volumes:
-      # SQLite database, uploads, reports, EI assets. Must be writable by UID 1654 (the image's "app" user).
-      - ${BREAKBAR_DATA:-/srv/breakbar-logs/data}:/app/data
+      # SQLite database, uploads, reports, EI assets. Default: the folder "data" next to "deploy" (relative to this file).
+      # Must be writable by UID 1654 (the image's "app" user).
+      - ${BREAKBAR_DATA:-../data}:/app/data
     env_file:
       # Secrets such as ServiceClients__ApiKeys__voidlog, see .env.example
       - path: .env

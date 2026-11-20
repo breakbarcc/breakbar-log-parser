@@ -451,9 +451,9 @@ Caddy läuft als Systemdienst auf dem Host und macht TLS automatisch (Let's Encr
 - API-Container: `127.0.0.1:4100:8080` (nicht 4000, der gehört voidlog)
 - Basis-Image: `mcr.microsoft.com/dotnet/aspnet:10.0` (Debian, enthält **ICU**). EI setzt die Kultur `en-US` und braucht daher ICU; der Invariant-Globalization-Modus ist keine Option. Bei `-alpine`- oder `-chiseled`-Varianten nur die `-extra`-Variante bzw. mit `icu-libs` verwenden. (Gefunden beim VPS-Benchmark: ohne `libicu` bricht .NET sofort mit Exit-Code 134 ab.)
 - Zweiter Linux-Stolperstein aus dem Benchmark: EIs `GW2EIParserCommons` nutzt `System.Configuration`-Benutzereinstellungen (`Settings.Default.Upgrade()`). Fehlt `~/.local/share`, stürzt EI mit `ArgumentNullException (Parameter 'path')` ab. Im eigenen Dienst daher **EI-Settings selbst als Objekte bauen** (`ParserSettings`, `HTMLSettings`, `RawFormatSettings`) und `Properties.Settings`/`ProgramHelper` aus `GW2EIParserCommons` nicht verwenden; im Container zusätzlich ein beschreibbares `HOME` mit `.local/share` vorsehen.
-- Daten als **Bind-Mount** `/srv/breakbar-logs/data` → `/app/data` (SQLite, Uploads, Reports, EI-Assets).
+- Daten als **Bind-Mount** `/home/deploy/apps/breakbar-logs/data` (neben voidlog in `~/apps/`) → `/app/data` (SQLite, Uploads, Reports, EI-Assets).
 - **Geändert (Schritt 4):** Die API liefert Reports (`/r/{id}`, `/r/{id}/json`), EI-Assets (`/ei-assets/*`) und später das Frontend selbst aus; Caddy macht nur TLS, Komprimierung und Weiterleitung. Grund: ein Ort für alle Pfade, keine Leserechte für den Benutzer `caddy` auf dem Datenordner, gleiches Verhalten lokal und auf dem VPS. Kestrel liefert Dateien sehr effizient aus; HTML wird **unkomprimiert** gespeichert (gzip spart dort nur ~25 %) und von Caddy beim Ausliefern komprimiert, das JSON liegt bereits als gzip vor und wird mit `Content-Encoding: gzip` gesendet (Caddy komprimiert es nicht erneut).
-- Die Site-Konfiguration liegt im Repo (`deploy/logs.caddy`) und wird in `/etc/caddy/Caddyfile` mit `import /srv/breakbar-logs/deploy/logs.caddy` eingebunden. voidlogs Block bleibt unberührt.
+- Die Site-Konfiguration liegt im Repo (`deploy/logs.caddy`), wird einmal nach `/etc/caddy/logs.caddy` kopiert (Caddy läuft als Benutzer `caddy` und kann `/home/deploy` nicht lesen) und in `/etc/caddy/Caddyfile` mit `import /etc/caddy/logs.caddy` eingebunden. voidlogs Block bleibt unberührt.
 
 ```caddy
 logs.breakbar.cc {
@@ -485,7 +485,7 @@ voidlog.breakbar.cc {
         reverse_proxy localhost:4000
 }
 
-import /srv/breakbar-logs/deploy/logs.caddy
+import /etc/caddy/logs.caddy
 ```
 
 Änderungen prüfen und ohne Downtime laden: `caddy validate --config /etc/caddy/Caddyfile` und danach `sudo systemctl reload caddy`.
@@ -496,7 +496,7 @@ Anleitung Schritt für Schritt: [deploy/README.md](../deploy/README.md).
 
 - **Image:** `Dockerfile` im Repo-Root, drei Stufen (Node baut das Frontend, .NET SDK baut die API, Laufzeit `aspnet:10.0` als Benutzer `app`, UID 1654). Healthcheck auf `/api/health`.
 - **CI/CD (ohne Registry, wie voidlog per SSH):** `ci.yml` testet Frontend und Backend bei jedem Push auf `main` und bei Pull Requests. `deploy.yml` läuft nur bei einem Push auf den Branch `prod` (`git push origin main:prod`), in der geschützten Umgebung `prod`: Tests, Image bauen, `docker save | gzip | ssh vps docker load`, Compose-/Caddy-Datei und `deploy.sh` kopieren, `deploy.sh` startet den Container, wartet auf „healthy“ und behält die 3 letzten Images für Rollbacks. Der VPS baut nicht (kein Compiler-Lauf neben voidlog) und braucht keinen Quellcode. Die früher geplante Registry (ghcr.io) ist entfallen (Berechtigungsfehler 403, ein zusätzliches System; Entscheidung 2026-11-20). Das SSH-Secret liegt nur in der Umgebung `prod`; der Workflow läuft bewusst nicht bei Pull Requests (öffentliches Repo).
-- **Compose:** `deploy/docker-compose.yml` (Image `breakbar-logs:${IMAGE_TAG}`, `pull_policy: never`) – Port nur auf `127.0.0.1:4100`, Bind-Mount `/srv/breakbar-logs/data`, `mem_limit: 2800m`, `cpus: 2`, `cpu_shares: 512` (voidlog hat bei Konkurrenz Vorrang), Log-Rotation. Secrets (API-Key für voidlog) in `deploy/.env`.
+- **Compose:** `deploy/docker-compose.yml` (Image `breakbar-logs:${IMAGE_TAG}`, `pull_policy: never`) – Port nur auf `127.0.0.1:4100`, Bind-Mount `../data` (neben `deploy/`, auf dem VPS `/home/deploy/apps/breakbar-logs/data`), `mem_limit: 2800m`, `cpus: 2`, `cpu_shares: 512` (voidlog hat bei Konkurrenz Vorrang), Log-Rotation. Secrets (API-Key für voidlog) in `deploy/.env`.
 - **Proxy-Header:** Caddy erreicht den Container über die Docker-Bridge, nicht über Loopback. `ForwardedHeaders__TrustAllProxies=true` im Image sorgt dafür, dass Client-IP (Rate-Limit) und HTTPS (Secure-Cookie) trotzdem ankommen. Sicher nur, weil der Port ausschließlich auf 127.0.0.1 veröffentlicht ist.
 - **Aufbewahrung** (`RetentionService`, alle 15 Minuten): **alle** Berichte und alle abgeschlossenen Job-Einträge werden nach 7 Tagen gelöscht (`Retention:ReportDays`), und zwar bis zu 15 Minuten früher, damit die Frist nie überschritten wird. Zusätzlich: Berichte über 60 GB → älteste früher löschen bis 90 %, verwaiste Dateien entfernen. Wartende und laufende Jobs bleiben. Ein Job, der auf einen gelöschten (älteren) Bericht zeigt, steht auf „Abgelaufen“. SQLite überschreibt gelöschte Zeilen (`secure_delete`). Die Liste zeigt „Link gültig bis dd.mm.“.
 - **Datenbank:** Schema-Version 1 (`PRAGMA user_version`); spätere Änderungen nur noch als Migration in `Persistence/Database.cs`.

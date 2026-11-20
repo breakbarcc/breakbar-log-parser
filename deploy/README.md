@@ -10,10 +10,10 @@ git push origin main:prod
    │  2. Image bauen             4. deploy.sh auf dem VPS: starten, auf "healthy" warten, alte Images aufräumen
    ▼
 Internet ──► Caddy (Host, :443, TLS) ──► 127.0.0.1:4100 ──► Container breakbar-logs (:8080)
-                                                              └─ /srv/breakbar-logs/data  (SQLite, Uploads, Berichte)
+                                                              └─ ~deploy/apps/breakbar-logs/data  (SQLite, Uploads, Berichte)
 ```
 
-Das Image wird auf GitHub gebaut und direkt per SSH auf den VPS geladen. Es gibt **keine Registry** und **keinen Build auf dem VPS** (2 vCPU, geteilt mit voidlog). Auf dem VPS liegt kein Quellcode: nur `deploy/` (Compose-Datei, Caddy-Datei, Skript), `data/` und die geheime `.env`.
+Das Image wird auf GitHub gebaut und direkt per SSH auf den VPS geladen. Es gibt **keine Registry** und **keinen Build auf dem VPS** (2 vCPU, geteilt mit voidlog). Auf dem VPS liegt kein Quellcode: nur `deploy/` (Compose-Datei, Caddy-Datei, Skript), `data/` und die geheime `.env`, in `/home/deploy/apps/breakbar-logs`, neben voidlog (`/home/deploy/apps/voidlog`).
 
 Das Muster entspricht dem von voidlog (Branch `prod`, geschützte Umgebung `prod`, SSH als Benutzer `deploy`), nur ohne Build auf dem Server.
 
@@ -33,9 +33,8 @@ Bei Cloudflare als **DNS only (graue Wolke)** anlegen, nicht als Proxy (Plan, Ab
 Der Benutzer `deploy` existiert dort schon (voidlog nutzt ihn) und darf Docker verwenden. Prüfen: `id deploy` muss die Gruppe `docker` enthalten. Dann:
 
 ```bash
-sudo mkdir -p /srv/breakbar-logs/deploy /srv/breakbar-logs/data
-sudo chown -R deploy:deploy /srv/breakbar-logs
-sudo chown 1654:1654 /srv/breakbar-logs/data   # UID des Benutzers "app" im Container
+mkdir -p ~/apps/breakbar-logs/deploy ~/apps/breakbar-logs/data     # als Benutzer deploy
+sudo chown 1654:1654 /home/deploy/apps/breakbar-logs/data           # als Benutzer mit sudo; 1654 = UID des Benutzers "app" im Container
 ```
 
 ### 3. SSH-Schlüssel nur für dieses Repo
@@ -53,9 +52,9 @@ Die private Datei `breakbar-deploy` gehört danach **nur** noch in das GitHub-Se
 ### 4. Geheime Einstellungen auf dem VPS (`.env`)
 
 ```bash
-echo "ServiceClients__ApiKeys__voidlog=$(openssl rand -hex 32)" > /srv/breakbar-logs/deploy/.env
-chmod 600 /srv/breakbar-logs/deploy/.env
-cat /srv/breakbar-logs/deploy/.env        # den Schlüssel auch in voidlog eintragen (Header X-Api-Key)
+echo "ServiceClients__ApiKeys__voidlog=$(openssl rand -hex 32)" > ~/apps/breakbar-logs/deploy/.env
+chmod 600 ~/apps/breakbar-logs/deploy/.env
+cat ~/apps/breakbar-logs/deploy/.env        # den Schlüssel auch in voidlog eintragen (Header X-Api-Key)
 ```
 
 Weitere Optionen stehen in [.env.example](.env.example). Die `.env` bleibt auf dem VPS, wird nie überschrieben und ist im Git ignoriert.
@@ -71,7 +70,7 @@ Repository → *Settings* → *Environments* → *New environment* `prod`:
 | Variable | `VPS_HOST_KEY` | Ausgabe von `ssh-keyscan -t ed25519 <vps>` (pinnt den Server) |
 | Variable (optional) | `VPS_USER` | Standard `deploy` |
 | Variable (optional) | `VPS_PORT` | Standard `22` |
-| Variable (optional) | `VPS_APP_DIR` | Standard `/srv/breakbar-logs` |
+| Variable (optional) | `VPS_APP_DIR` | Standard `apps/breakbar-logs` (relativ zum Home des SSH-Benutzers, also `/home/deploy/apps/breakbar-logs`) |
 
 Schutz (wie bei voidlog, das Repo ist öffentlich):
 
@@ -88,21 +87,27 @@ git push origin main:prod
 Fortschritt im Actions-Tab. Danach auf dem VPS (Status sollte nach ~30 s „healthy“ sein):
 
 ```bash
-cd /srv/breakbar-logs
+cd ~/apps/breakbar-logs
 docker compose -f deploy/docker-compose.yml ps
 curl -s http://127.0.0.1:4100/api/health
 ```
 
 ### 7. Caddy
 
-Nach dem ersten Deployment liegt `/srv/breakbar-logs/deploy/logs.caddy` auf dem VPS. In `/etc/caddy/Caddyfile` unter den voidlog-Block eine Zeile anhängen:
+Nach dem ersten Deployment liegt `/home/deploy/apps/breakbar-logs/deploy/logs.caddy` auf dem VPS. Caddy läuft als Benutzer `caddy` und kann `/home/deploy` normalerweise nicht lesen (Debian legt Home-Verzeichnisse mit Modus 700 an). Deshalb wird die Datei einmal nach `/etc/caddy/` **kopiert**:
+
+```bash
+sudo cp /home/deploy/apps/breakbar-logs/deploy/logs.caddy /etc/caddy/logs.caddy
+```
+
+Dann in `/etc/caddy/Caddyfile` unter den voidlog-Block eine Zeile anhängen:
 
 ```caddy
 voidlog.breakbar.cc {
         reverse_proxy localhost:4000
 }
 
-import /srv/breakbar-logs/deploy/logs.caddy
+import /etc/caddy/logs.caddy
 ```
 
 Prüfen und ohne Ausfall neu laden:
@@ -141,14 +146,14 @@ git push origin main:prod        # oder main in prod mergen
 
 Der Workflow testet, baut, überträgt das Image (komprimiert grob 150 MB) und startet den Container neu (~5 s Unterbrechung). Schlägt irgendein Schritt vor dem Start fehl (Tests, Build, Übertragung), läuft die alte Version unberührt weiter. Laufende Parses werden beim Neustart unterbrochen und danach automatisch wieder eingereiht.
 
-- Ändert sich `deploy/logs.caddy`: die Datei kommt mit dem Deployment auf den VPS, Caddy musst du aber von Hand neu laden (`sudo systemctl reload caddy`).
+- Ändert sich `deploy/logs.caddy`: die neue Fassung kommt mit dem Deployment auf den VPS, Caddy bekommt sie aber nur von Hand: `sudo cp /home/deploy/apps/breakbar-logs/deploy/logs.caddy /etc/caddy/logs.caddy && sudo systemctl reload caddy`.
 - Auf dem VPS bleiben die letzten 3 Images für Rollbacks, ältere löscht `deploy.sh`.
 
 **Notfall – auf eine ältere Version zurück** (auf dem VPS):
 
 ```bash
 docker images breakbar-logs                         # Tags = Commit-Hashes, neueste zuerst
-cd /srv/breakbar-logs
+cd ~/apps/breakbar-logs
 IMAGE_TAG=<commit-hash> bash deploy/deploy.sh
 ```
 
@@ -157,9 +162,9 @@ Danach `prod` auf einen guten Commit zurücksetzen, sonst überschreibt das näc
 ## Betrieb
 
 ```bash
-docker compose -f deploy/docker-compose.yml logs -f --tail 100   # Logs (im Ordner /srv/breakbar-logs)
+docker compose -f deploy/docker-compose.yml logs -f --tail 100   # Logs (im Ordner ~/apps/breakbar-logs)
 docker stats breakbar-logs-app-1                                  # CPU/RAM
-du -sh /srv/breakbar-logs/data/*                                  # Speicher
+du -sh ~/apps/breakbar-logs/data/*                                  # Speicher
 ```
 
 **Backup: bewusst keines für `data/`.** Berichte und Upload-Daten sind flüchtig (höchstens 7 Tage, siehe Datenschutzerklärung, die Sicherungskopien ausschließt). Bei einem Plattendefekt gehen nur die Berichte der letzten Tage verloren; Logs lassen sich neu hochladen, und voidlog speichert seine eigenen Ergebnisse selbst in R2. Sichere stattdessen nur, was nicht flüchtig ist: `deploy/.env` (API-Key) und die Konfiguration im Git.

@@ -1,5 +1,5 @@
 # Site blocks for breakbar-logs. Included from /etc/caddy/Caddyfile with:
-#   import /srv/breakbar-logs/deploy/logs.caddy
+#   import /etc/caddy/logs.caddy     (copy of this file, see deploy/README.md)
 # Caddy obtains TLS certificates for both names automatically (DNS A/AAAA records must point to the VPS).
 
 # App and API
