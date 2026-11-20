@@ -54,7 +54,7 @@ export function PrivacyPage() {
           </li>
           <li>Ein technisch notwendiges Cookie ordnet deine Uploads deinem Browser zu.</li>
           <li>
-            <strong>Die Berichtsseiten laden Inhalte von Drittanbietern nach</strong> (u. a. Google Fonts, Cloudflare, ArenaNet). Dabei wird
+            <strong>Die Berichtsseiten laden Inhalte von Drittanbietern nach</strong> (u. a. Cloudflare, jsDelivr, ArenaNet, Imgur). Dabei wird
             deine IP-Adresse an diese Anbieter übertragen, siehe Abschnitt „Berichtsseiten“.
           </li>
         </Ul>
@@ -143,14 +143,10 @@ export function PrivacyPage() {
       <Section title="Berichtsseiten (Elite Insights): Inhalte von Drittanbietern">
         <P>
           Die HTML-Berichte unter <Code>reports.breakbar.cc</Code> werden vom Programm Elite Insights erzeugt. Sie laden beim Öffnen Skripte,
-          Stile, Schriften und Bilder von fremden Servern nach. Dabei erhalten diese Anbieter technisch zwingend deine IP-Adresse, die
-          Adresse der aufgerufenen Seite und Angaben zu deinem Browser. Das betrifft:
+          Stile und Bilder von fremden Servern nach. Dabei erhalten diese Anbieter technisch zwingend deine IP-Adresse, die Adresse der
+          aufgerufenen Seite und Angaben zu deinem Browser. Das betrifft:
         </P>
         <Ul>
-          <li>
-            <strong>Google Fonts</strong> (<Code>fonts.googleapis.com</Code>, <Code>fonts.gstatic.com</Code>; Google Ireland Limited bzw.
-            Google LLC, USA): die Schriftart „Open Sans“,
-          </li>
           <li>
             <strong>Cloudflare cdnjs</strong> (<Code>cdnjs.cloudflare.com</Code>; Cloudflare, Inc., USA): Design- und Skriptbibliotheken
             (Bootstrap-Theme, Popper, Pako),
@@ -167,11 +163,17 @@ export function PrivacyPage() {
             und Bilder zu Fertigkeiten, Effekten und Gegnern,
           </li>
           <li>
-            nur bei Bedarf oder wenn eine Quelle ausfällt: <Code>i.imgur.com</Code> (Bilder, teilweise über{' '}
-            <Code>external-content.duckduckgo.com</Code>), <Code>icons-gw2.darthmaim-cdn.com</Code> und <Code>assets.gw2dat.com</Code>{' '}
-            (Ersatzquellen für Symbole).
+            <strong>Imgur</strong> (<Code>i.imgur.com</Code>, <Code>imgur.com</Code>; USA): Symbole und Bilder sowie eine kurze
+            Erreichbarkeitsprüfung beim Laden der Seite,
+          </li>
+          <li>
+            nur wenn eine Bildquelle ausfällt: <Code>external-content.duckduckgo.com</Code> (Zwischenserver für Imgur-Bilder),{' '}
+            <Code>icons-gw2.darthmaim-cdn.com</Code> und <Code>assets.gw2dat.com</Code> (Ersatzquellen für Symbole).
           </li>
         </Ul>
+        <P>
+          Die Schrift der Berichte (Open Sans) liefern wir selbst aus. Die Berichte sprechen keine Google-Dienste an.
+        </P>
         <P>
           Einige dieser Anbieter sitzen in den USA oder nutzen Server dort. Wir haben keinen Einfluss auf die Datenverarbeitung dieser
           Anbieter; es gelten deren Datenschutzerklärungen. Wir setzen die Inhalte ein, weil die Berichte ohne sie nicht funktionieren
