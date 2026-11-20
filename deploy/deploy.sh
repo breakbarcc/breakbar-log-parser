@@ -43,9 +43,13 @@ echo "Healthy."
 # Keep the newest images for rollbacks and remove the rest. Tags are removed one by one; removing a tag of an
 # image that is in use (or has other tags) only untags it, so this cannot touch the running container.
 # Sorted by the image creation time: the output order of "docker images" is not reliable.
-docker images breakbar-logs --format '{{.Tag}}' | grep -vx -e latest -e "$TAG" \
+# grep exits with 1 when nothing is left (e.g. at the very first deployment: only "latest" and the new tag exist),
+# which "set -e" with "pipefail" would turn into a failed deployment although the new version is healthy.
+# Cleaning up is best effort and must never fail a deployment.
+{ docker images breakbar-logs --format '{{.Tag}}' | { grep -vx -e latest -e "$TAG" || true; } \
   | while read -r tag; do printf '%s %s\n' "$(docker image inspect -f '{{.Created}}' "breakbar-logs:${tag}")" "$tag"; done \
   | sort -r | tail -n +"$((KEEP + 1))" | cut -d' ' -f2 \
-  | while read -r old; do docker rmi "breakbar-logs:${old}" > /dev/null 2>&1 || true; done
-docker image prune -f > /dev/null
+  | while read -r old; do docker rmi "breakbar-logs:${old}" > /dev/null 2>&1 || true; done; } \
+  || echo "Warning: cleaning up old images failed (ignored)." >&2
+docker image prune -f > /dev/null 2>&1 || true
 echo "Done: running $IMAGE"

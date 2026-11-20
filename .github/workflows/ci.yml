@@ -37,6 +37,10 @@ jobs:
           npm test
           npm run build
 
+      # deploy.sh runs on the VPS; its cases (first deployment, cleanup, failures) are tested with a stub docker.
+      - name: Deploy script test
+        run: bash deploy/test-deploy-script.sh
+
       - uses: actions/setup-dotnet@v4
         with:
           global-json-file: backend/global.json
