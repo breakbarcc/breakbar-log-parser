@@ -3,11 +3,19 @@
 Ziel: `logs.breakbar.cc` (App und API) und `reports.breakbar.cc` (Berichte) auf dem Debian-13-VPS neben voidlog. Hintergrund und Entscheidungen: [docs/PLAN.md](../docs/PLAN.md), Abschnitte 1b, 4b, 6a und 6b.
 
 ```
+git push origin main:prod
+   │
+   ▼  GitHub Actions (.github/workflows/deploy.yml)
+   │  1. Tests (ci.yml)          3. docker save | gzip | ssh vps 'gunzip | docker load'
+   │  2. Image bauen             4. deploy.sh auf dem VPS: starten, auf "healthy" warten, alte Images aufräumen
+   ▼
 Internet ──► Caddy (Host, :443, TLS) ──► 127.0.0.1:4100 ──► Container breakbar-logs (:8080)
                                                               └─ /srv/breakbar-logs/data  (SQLite, Uploads, Berichte)
 ```
 
-Das Docker-Image baut GitHub Actions bei jedem Push auf `main` und legt es als `ghcr.io/breakbarcc/breakbar-log-parser:latest` ab. Der VPS lädt es nur herunter.
+Das Image wird auf GitHub gebaut und direkt per SSH auf den VPS geladen. Es gibt **keine Registry** und **keinen Build auf dem VPS** (2 vCPU, geteilt mit voidlog). Auf dem VPS liegt kein Quellcode: nur `deploy/` (Compose-Datei, Caddy-Datei, Skript), `data/` und die geheime `.env`.
+
+Das Muster entspricht dem von voidlog (Branch `prod`, geschützte Umgebung `prod`, SSH als Benutzer `deploy`), nur ohne Build auf dem Server.
 
 ## Einmalige Einrichtung
 
@@ -18,48 +26,76 @@ A- (und ggf. AAAA-) Einträge auf die IP des VPS:
 - `logs.breakbar.cc`
 - `reports.breakbar.cc`
 
-### 2. Docker-Image freigeben
+Bei Cloudflare als **DNS only (graue Wolke)** anlegen, nicht als Proxy (Plan, Abschnitt 4d).
 
-Pakete einer Organisation sind auf GitHub zunächst privat. Entweder
+### 2. Ordner und Benutzer auf dem VPS
 
-- **öffentlich machen** (empfohlen, das Repo ist ohnehin öffentlich): GitHub → Organisation `breakbarcc` → *Packages* → `breakbar-log-parser` → *Package settings* → *Change visibility* → *Public*,
-- oder auf dem VPS einmal anmelden: `docker login ghcr.io` mit einem Personal Access Token (Recht `read:packages`).
-
-### 3. Repository und Datenordner
+Der Benutzer `deploy` existiert dort schon (voidlog nutzt ihn) und darf Docker verwenden. Prüfen: `id deploy` muss die Gruppe `docker` enthalten. Dann:
 
 ```bash
-sudo mkdir -p /srv/breakbar-logs
-sudo chown "$USER" /srv/breakbar-logs
-git clone https://github.com/breakbarcc/breakbar-log-parser.git /srv/breakbar-logs
-mkdir -p /srv/breakbar-logs/data
-sudo chown -R 1654:1654 /srv/breakbar-logs/data   # UID des Benutzers "app" im Container
+sudo mkdir -p /srv/breakbar-logs/deploy /srv/breakbar-logs/data
+sudo chown -R deploy:deploy /srv/breakbar-logs
+sudo chown 1654:1654 /srv/breakbar-logs/data   # UID des Benutzers "app" im Container
 ```
 
-Das Submodule (Elite Insights) wird auf dem VPS nicht gebraucht, solange das fertige Image genutzt wird.
+### 3. SSH-Schlüssel nur für dieses Repo
 
-### 4. Secrets
+Auf deinem Rechner (nicht auf dem VPS):
 
 ```bash
-cp /srv/breakbar-logs/deploy/.env.example /srv/breakbar-logs/deploy/.env
-openssl rand -hex 32    # Wert als ServiceClients__ApiKeys__voidlog in deploy/.env eintragen
+ssh-keygen -t ed25519 -f breakbar-deploy -C "github-actions breakbar-logs" -N ""
+ssh-copy-id -i breakbar-deploy.pub deploy@<vps>      # oder den Inhalt von breakbar-deploy.pub in ~deploy/.ssh/authorized_keys eintragen
+ssh-keyscan -t ed25519 <vps>                         # Ausgabe wird gleich als VPS_HOST_KEY gebraucht
+```
+
+Die private Datei `breakbar-deploy` gehört danach **nur** noch in das GitHub-Secret und wird vom Rechner gelöscht.
+
+### 4. Geheime Einstellungen auf dem VPS (`.env`)
+
+```bash
+echo "ServiceClients__ApiKeys__voidlog=$(openssl rand -hex 32)" > /srv/breakbar-logs/deploy/.env
 chmod 600 /srv/breakbar-logs/deploy/.env
+cat /srv/breakbar-logs/deploy/.env        # den Schlüssel auch in voidlog eintragen (Header X-Api-Key)
 ```
 
-Den gleichen Schlüssel bekommt voidlog (Header `X-Api-Key`). `deploy/.env` ist im Git ignoriert.
+Weitere Optionen stehen in [.env.example](.env.example). Die `.env` bleibt auf dem VPS, wird nie überschrieben und ist im Git ignoriert.
 
-### 5. Starten
+### 5. GitHub: Umgebung `prod`
+
+Repository → *Settings* → *Environments* → *New environment* `prod`:
+
+| Typ | Name | Wert |
+|---|---|---|
+| Secret | `VPS_SSH_KEY` | Inhalt der privaten Datei `breakbar-deploy` |
+| Variable | `VPS_HOST` | Hostname oder IP des VPS |
+| Variable | `VPS_HOST_KEY` | Ausgabe von `ssh-keyscan -t ed25519 <vps>` (pinnt den Server) |
+| Variable (optional) | `VPS_USER` | Standard `deploy` |
+| Variable (optional) | `VPS_PORT` | Standard `22` |
+| Variable (optional) | `VPS_APP_DIR` | Standard `/srv/breakbar-logs` |
+
+Schutz (wie bei voidlog, das Repo ist öffentlich):
+
+- In der Umgebung *Deployment branches* auf **`prod`** beschränken.
+- *Settings → Branches*: Branch `prod` schützen, nur du darfst pushen.
+- Der Deploy-Workflow läuft bewusst **nicht** bei Pull Requests, damit fremde Forks nie an das SSH-Secret kommen.
+
+### 6. Erstes Deployment
+
+```bash
+git push origin main:prod
+```
+
+Fortschritt im Actions-Tab. Danach auf dem VPS (Status sollte nach ~30 s „healthy“ sein):
 
 ```bash
 cd /srv/breakbar-logs
-docker compose -f deploy/docker-compose.yml pull
-docker compose -f deploy/docker-compose.yml up -d
-docker compose -f deploy/docker-compose.yml ps        # STATUS sollte nach ~30 s "healthy" zeigen
+docker compose -f deploy/docker-compose.yml ps
 curl -s http://127.0.0.1:4100/api/health
 ```
 
-### 6. Caddy
+### 7. Caddy
 
-In `/etc/caddy/Caddyfile` unter den voidlog-Block eine Zeile anhängen:
+Nach dem ersten Deployment liegt `/srv/breakbar-logs/deploy/logs.caddy` auf dem VPS. In `/etc/caddy/Caddyfile` unter den voidlog-Block eine Zeile anhängen:
 
 ```caddy
 voidlog.breakbar.cc {
@@ -76,7 +112,7 @@ caddy validate --config /etc/caddy/Caddyfile
 sudo systemctl reload caddy
 ```
 
-### 7. Kontrolle
+### 8. Kontrolle
 
 ```bash
 curl -s https://logs.breakbar.cc/api/health
@@ -99,24 +135,29 @@ Dann im Browser `https://logs.breakbar.cc` öffnen und einen Log hochladen.
 
 ## Update
 
-Nach einem Push auf `main` und grünem GitHub-Actions-Lauf:
-
 ```bash
-cd /srv/breakbar-logs
-git pull                                               # nur für deploy/-Dateien nötig
-docker compose -f deploy/docker-compose.yml pull
-docker compose -f deploy/docker-compose.yml up -d      # startet den Container neu (~5 s Unterbrechung)
-docker image prune -f
+git push origin main:prod        # oder main in prod mergen
 ```
 
-Laufende Parses werden beim Neustart unterbrochen und danach automatisch wieder eingereiht. Ändert sich `deploy/logs.caddy`, Caddy wie oben neu laden.
+Der Workflow testet, baut, überträgt das Image (komprimiert grob 150 MB) und startet den Container neu (~5 s Unterbrechung). Schlägt irgendein Schritt vor dem Start fehl (Tests, Build, Übertragung), läuft die alte Version unberührt weiter. Laufende Parses werden beim Neustart unterbrochen und danach automatisch wieder eingereiht.
 
-**Notfall – auf eine ältere Version zurück:** In `deploy/docker-compose.yml` statt `:latest` das Tag `:sha-<commit>` eines früheren Builds eintragen und `up -d` ausführen.
+- Ändert sich `deploy/logs.caddy`: die Datei kommt mit dem Deployment auf den VPS, Caddy musst du aber von Hand neu laden (`sudo systemctl reload caddy`).
+- Auf dem VPS bleiben die letzten 3 Images für Rollbacks, ältere löscht `deploy.sh`.
+
+**Notfall – auf eine ältere Version zurück** (auf dem VPS):
+
+```bash
+docker images breakbar-logs                         # Tags = Commit-Hashes, neueste zuerst
+cd /srv/breakbar-logs
+IMAGE_TAG=<commit-hash> bash deploy/deploy.sh
+```
+
+Danach `prod` auf einen guten Commit zurücksetzen, sonst überschreibt das nächste Deployment den Rollback.
 
 ## Betrieb
 
 ```bash
-docker compose -f deploy/docker-compose.yml logs -f --tail 100   # Logs
+docker compose -f deploy/docker-compose.yml logs -f --tail 100   # Logs (im Ordner /srv/breakbar-logs)
 docker stats breakbar-logs-app-1                                  # CPU/RAM
 du -sh /srv/breakbar-logs/data/*                                  # Speicher
 ```

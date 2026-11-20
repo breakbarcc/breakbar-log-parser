@@ -1,7 +1,7 @@
 # breakbar-logs: one image with the API, Elite Insights and the built frontend.
 # Build from the repository root (submodule must be checked out):
 #   git submodule update --init && docker build -t breakbar-logs .
-# GitHub Actions builds and publishes it as ghcr.io/breakbarcc/breakbar-log-parser (see .github/workflows/ci.yml).
+# GitHub Actions builds it and streams it to the VPS over SSH, no registry (see .github/workflows/deploy.yml).
 
 # ---- Frontend --------------------------------------------------------------------------------
 FROM node:24-alpine AS frontend
