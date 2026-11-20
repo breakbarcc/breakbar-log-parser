@@ -298,17 +298,24 @@ Was sie beschreibt, und woran man den Text koppeln muss:
 **Offen / beim Deployment beachten:**
 - `Secure`-Flag des Cookies hängt an `X-Forwarded-Proto` von Caddy → nach dem Deployment prüfen.
 - API-Key von voidlog nur als Umgebungsvariable/Secret, nie im Repo; wer ihn hat, sieht alle voidlog-Jobs.
-- Fremd-CDNs in EIs HTML (siehe 2a): Vorschlag in 4d.
+- Fremd-CDNs in EIs HTML (siehe 2a): Schrift ist selbst gehostet, die Bibliotheken bleiben bewusst bei den CDNs (Entscheidung 2026-11-20, siehe 4d).
 
 ## 4d. Drittanbieter in den Berichten und Cloudflare (Vorschlag, Stand 2026-11-20, noch nicht umgesetzt)
 
 **Teil 1: Code und Schrift selbst ausliefern (empfohlen).** Entfernt Google Fonts, Cloudflare cdnjs, jsDelivr, code.jquery.com und cdn.plot.ly aus dem Datenfluss.
-- **Stand: Schrift erledigt (2026-11-20).** `ReportHtmlRewriter` ersetzt EIs Google-Fonts-Link durch `/ei-assets/fonts/open-sans.css`; Open Sans 400 (Latin und Latin-Ext, ~34 KB, SIL OFL) liegt unter `backend/src/Breakbar.Processing/Assets/open-sans/` und wird beim Start nach `<Assets>/fonts/` kopiert. Test `Report_does_not_load_google_fonts_…` sichert es ab. Das helle EI-Design (Bootswatch „yeti“) importiert Google Fonts aus seinem eigenen CSS; wir erzeugen nur das dunkle (`HTMLLightTheme = false`), das ausdrücklich so lassen, solange das CSS nicht selbst gehostet ist. **Noch offen: die Bibliotheken (jQuery, Popper, Bootstrap, Vue, Pako, Plotly, Bootswatch-CSS) und die CSP.** Der Rewriter-Mechanismus trägt sie als weitere Einträge.
+- **Stand: Schrift erledigt (2026-11-20).** `ReportHtmlRewriter` ersetzt EIs Google-Fonts-Link durch `/ei-assets/fonts/open-sans.css`; Open Sans 400 (Latin und Latin-Ext, ~34 KB, SIL OFL) liegt unter `backend/src/Breakbar.Processing/Assets/open-sans/` und wird beim Start nach `<Assets>/fonts/` kopiert. Test `Report_does_not_load_google_fonts_…` sichert es ab. Das helle EI-Design (Bootswatch „yeti“) importiert Google Fonts aus seinem eigenen CSS; wir erzeugen nur das dunkle (`HTMLLightTheme = false`), das ausdrücklich so lassen, solange das CSS nicht selbst gehostet ist. **Die Bibliotheken (jQuery, Popper, Bootstrap, Vue, Pako, Plotly, Bootswatch-CSS) und die CSP bleiben unverändert (Entscheidung 2026-11-20: „so lassen“, siehe unten).** Der Rewriter-Mechanismus würde sie als weitere Einträge tragen, falls die Entscheidung kippt.
 - Dieselben Versionen, die Elite Insights verwendet (stehen in `external/…/GW2EIBuilders/Resources/template.html`), kommen per npm mit exakten Versionen und Lockfile ins Docker-Image und liegen auf der Berichts-Origin unter `/vendor/…` (jQuery, Popper 1.16.1, Bootstrap 4.2.1, Vue 2.7.14, Pako 1.0.10, Plotly, Bootswatch-Themes slate/yeti, Open Sans über `@fontsource/open-sans`).
 - Der `EliteInsightsAdapter` ersetzt nach dem Erzeugen die URLs in der HTML (String-Ersetzung über eine Liste, ~9 Einträge). Kosten: das HTML liegt kurz im Speicher (wenige MB).
 - Ein Test erzeugt einen Bericht und scheitert, wenn die HTML noch einen Host außerhalb einer Erlaubnisliste enthält. Bringt ein EI-Update neue oder geänderte URLs, merkt man es sofort.
 - Strenge CSP für die Berichts-Origin: `default-src 'self'; script-src 'self' 'unsafe-inline'; style-src 'self' 'unsafe-inline'; connect-src 'self'; img-src 'self' data: https://render.guildwars2.com https://wiki.guildwars2.com https://i.imgur.com; font-src 'self'`. Das schützt zusätzlich gegen eingeschleustes Skript aus manipulierten Logs (4b): es kann nichts an fremde Server senden. Die Ersatzquellen (darthmaim, gw2dat, DuckDuckGo-Proxy) sind damit gesperrt und fallen aus der Datenschutzerklärung heraus.
 - Nebeneffekte: Berichte laden schneller (lange gecachte eigene Dateien, kein Fremd-DNS), ~6 MB mehr im Image.
+
+**Entscheidung 2026-11-20 zu Teil 1 (Bibliotheken): so lassen.** Die Bibliotheken kommen weiter von cdnjs (Cloudflare), jsDelivr, code.jquery.com und cdn.plot.ly, und die Datenschutzerklärung nennt diese Anbieter offen. Bewusst akzeptiert:
+- Datenschutz: IP und Seitenadresse gehen bei jedem Bericht an diese Anbieter. Das Risiko ist geringer als bei Google Fonts (dazu gibt es Rechtsprechung, zu Skript-CDNs kaum), aber dieselbe Begründung („lokal einbinden wäre möglich“) ließe sich übertragen.
+- Sicherheit: Die Skripte laufen ohne Integritätsprüfung (kein SRI). Ein kompromittiertes CDN könnte Berichte manipulieren, aber wegen der getrennten Berichts-Origin (4b) nicht die API lesen. Eine strenge CSP mit `script-src 'self'` ist damit nicht möglich.
+- Ausfall: Ist ein CDN gestört, funktionieren die Berichte nicht.
+- Dafür entfallen ~6 MB Image, Pflege der Versionen bei Elite-Insights-Updates und etwa 1–2 Stunden Arbeit.
+- Wiedervorlage, wenn: sich Rechtsprechung oder Abmahnpraxis zu Skript-CDNs ändert, jemand die Berichte beanstandet, oder Elite Insights die Bibliotheken ohnehin austauscht. Der Aufwand ist in diesem Abschnitt beschrieben.
 
 **Teil 2: Bilder (ArenaNet, imgur).** Bleiben extern (render.guildwars2.com, wiki.guildwars2.com, i.imgur.com), weil viele Symbole nur dort liegen. Weiter offen benennen. Wer sie auch loswerden will: Bild-Proxy mit Festplatten-Cache auf der Berichts-Origin (feste Erlaubnisliste gegen SSRF, mehr Traffic und Speicher, Nutzungsbedingungen von ArenaNet prüfen). Aufwand und Nutzen stehen aktuell nicht im Verhältnis.
 
