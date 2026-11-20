@@ -23,6 +23,9 @@ public sealed class EliteInsightsOptions
     /// <summary>Self-hosted fonts for the report pages (shipped with the app), published into <c>AssetsDirectory/fonts</c> at startup.</summary>
     public string ReportFontsDirectory { get; init; } = Path.Combine(AppContext.BaseDirectory, "ReportFonts");
 
+    /// <summary>Public address of the site, e.g. "https://logs.breakbar.cc"; linked from the "Generated with Elite Insights" tag in the report footer. Null: no tag.</summary>
+    public string? SiteUrl { get; init; }
+
     public bool ParseCombatReplay { get; init; } = true;
 
     /// <summary>Logs shorter than this (ms) are rejected as "too short". EI default: 2200.</summary>

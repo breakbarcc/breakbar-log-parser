@@ -17,6 +17,7 @@ public sealed class EliteInsightsAdapterTests : IDisposable
         {
             AssetsDirectory = Path.Combine(_workDir, "ei-assets"),
             AssetsBaseUrl = AssetsBaseUrl,
+            SiteUrl = "https://logs.example.test",
         });
     }
 
@@ -93,6 +94,22 @@ public sealed class EliteInsightsAdapterTests : IDisposable
         Assert.NotEmpty(files);
         Assert.All(files, f => Assert.True(File.Exists(Path.Combine(fonts, f)), $"missing {f}"));
         Assert.True(File.Exists(Path.Combine(fonts, "OFL.txt")), "font license must be shipped with the fonts");
+    }
+
+    [Fact]
+    public void Report_footer_carries_the_breakbar_tag()
+    {
+        string log = TestLogs.RequireSmallest();
+
+        var result = _adapter.Parse(log, Path.Combine(_workDir, "tag-report"), TestContext.Current.CancellationToken);
+
+        Assert.True(result.Success, result.FailureReason);
+        string html = File.ReadAllText(result.HtmlPath!);
+        // If this fails after an Elite Insights update, its footer changed: adjust ReportHtmlRewriter (docs/PLAN.md 4d).
+        Assert.Contains("Generated with <a href=\"https://github.com/baaron4/GW2-Elite-Insights-Parser\"", html, StringComparison.Ordinal);
+        Assert.Contains("<a href=\"https://logs.example.test\" target=\"_blank\" rel=\"noopener noreferrer\">breakbar-logs</a>", html, StringComparison.Ordinal);
+        // The tag sits in the footer, after EI's own last line.
+        Assert.True(html.IndexOf("Recorded by:", StringComparison.Ordinal) < html.IndexOf(">breakbar-logs</a>", StringComparison.Ordinal));
     }
 
     [Fact]

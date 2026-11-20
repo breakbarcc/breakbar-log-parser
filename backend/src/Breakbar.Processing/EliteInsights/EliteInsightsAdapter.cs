@@ -151,7 +151,7 @@ public sealed class EliteInsightsAdapter : IEliteInsightsParser
         {
             builder.CreateHTML(writer, _options.AssetsDirectory);
         }
-        string html = ReportHtmlRewriter.Rewrite(Utf8NoBom.GetString(buffer.GetBuffer(), 0, (int)buffer.Length), _options.AssetsBaseUrl);
+        string html = ReportHtmlRewriter.Rewrite(Utf8NoBom.GetString(buffer.GetBuffer(), 0, (int)buffer.Length), _options.AssetsBaseUrl, _options.SiteUrl);
         File.WriteAllText(htmlPath, html, Utf8NoBom);
     }
 

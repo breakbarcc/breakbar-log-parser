@@ -21,6 +21,7 @@ var eiOptions = new EliteInsightsOptions
 {
     AssetsDirectory = storage.AssetsDirectory,
     AssetsBaseUrl = config["EliteInsights:AssetsBaseUrl"] ?? "/ei-assets",
+    SiteUrl = config["EliteInsights:SiteUrl"],
     ParseCombatReplay = config.GetValue("EliteInsights:ParseCombatReplay", true),
 };
 
