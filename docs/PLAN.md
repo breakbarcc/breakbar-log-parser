@@ -290,7 +290,7 @@ Die Datenschutzerklärung steht im Frontend (`/datenschutz`, `frontend/src/pages
 Was sie beschreibt, und woran man den Text koppeln muss:
 - **Keine Analyse, kein Tracking.** Die App lädt nichts von Dritten; Schriften sind selbst gehostet (kein Google Fonts in der App).
 - **Cookie `bb_uid`** (zufällige Kennung, host-only, HttpOnly, Secure, 1 Jahr; § 25 Abs. 2 Nr. 2 TDDDG) und zwei `localStorage`-Schlüssel (`breakbar.anonymize`, `breakbar.dismissedJobs`). Das Sprach-Cookie der Hauptseite (`breakbar-language`, gilt für alle Subdomains) wird mitgesendet, aber nicht gelesen. Neue Cookies oder Speicherschlüssel → Erklärung ändern.
-- **IP-Adresse:** nur im Speicher für das Upload-Limit, kein Zugriffslog (die App loggt Anfragen nicht, `deploy/logs.caddy` hat keine `log`-Direktive). Der VPS-Anbieter ist als Auftragsverarbeiter genannt, aber noch nicht namentlich.
+- **IP-Adresse:** nur im Speicher für das Upload-Limit, kein Zugriffslog (die App loggt Anfragen nicht, `deploy/logs.caddy` hat keine `log`-Direktive). Hoster ist die netcup GmbH (Auftragsverarbeitung nach Art. 28 DSGVO besteht, derselbe Server wie voidlog) und steht so in der Erklärung. Die Domain breakbar.cc wird über Cloudflare verwaltet; voidlog läuft dort als Reverse-Proxy. Ob `logs.`/`reports.breakbar.cc` ebenfalls über den Cloudflare-Proxy laufen, ist offen: Empfehlung DNS-only, sonst muss Cloudflare als Empfänger in die Erklärung (siehe Abschnitt 4d).
 - **Logs und Berichte:** enthalten Charakter- und Accountnamen auch von Mitspielern (Art. 6 Abs. 1 lit. b und f DSGVO, Option „Spielernamen anonymisieren“). Originaldatei wird nach der Auswertung gelöscht. **Berichte und Verwaltungsdaten: höchstens 7 Tage**, keine Sicherungskopien – umgesetzt in Schritt 6c (`RetentionService`, `Retention:ReportDays`, gemeinsame Konstante `REPORT_RETENTION_DAYS` im Frontend). Ändert man die Dauer, müssen Einstellung, Konstante und Erklärung gemeinsam angepasst werden.
 - **Berichtsseiten laden Inhalte von Dritten nach** (EI-Vorlage): Google Fonts (`fonts.googleapis.com`/`fonts.gstatic.com`), cdnjs (Cloudflare), jsDelivr, code.jquery.com, cdn.plot.ly, Bilder von `render.guildwars2.com`/`wiki.guildwars2.com`, Ersatzquellen imgur/DuckDuckGo-Proxy/darthmaim/gw2dat. Dabei geht die IP des Besuchers an diese Anbieter. Die Erklärung benennt das offen. Beseitigen ließe es sich nur, indem der Adapter diese Dateien selbst ausliefert (Bibliotheken vendorn, Schrift lokal, Bild-Hosts in der CSP der Berichts-Origin begrenzen); Bilder von ArenaNet bleiben auch dann extern, es sei denn, man hostet die Symbole selbst.
 - Pflege: Wer Speicherdauer, Cookies, Dienste oder Drittanbieter ändert, ändert `PrivacyPage.tsx` (Konstante `REPORT_RETENTION_DAYS`, Datum `UPDATED`) im selben Commit.
@@ -298,7 +298,25 @@ Was sie beschreibt, und woran man den Text koppeln muss:
 **Offen / beim Deployment beachten:**
 - `Secure`-Flag des Cookies hängt an `X-Forwarded-Proto` von Caddy → nach dem Deployment prüfen.
 - API-Key von voidlog nur als Umgebungsvariable/Secret, nie im Repo; wer ihn hat, sieht alle voidlog-Jobs.
-- Fremd-CDNs in EIs HTML (siehe 2a) später selbst hosten.
+- Fremd-CDNs in EIs HTML (siehe 2a): Vorschlag in 4d.
+
+## 4d. Drittanbieter in den Berichten und Cloudflare (Vorschlag, Stand 2026-11-20, noch nicht umgesetzt)
+
+**Teil 1: Code und Schrift selbst ausliefern (empfohlen).** Entfernt Google Fonts, Cloudflare cdnjs, jsDelivr, code.jquery.com und cdn.plot.ly aus dem Datenfluss.
+- Dieselben Versionen, die Elite Insights verwendet (stehen in `external/…/GW2EIBuilders/Resources/template.html`), kommen per npm mit exakten Versionen und Lockfile ins Docker-Image und liegen auf der Berichts-Origin unter `/vendor/…` (jQuery, Popper 1.16.1, Bootstrap 4.2.1, Vue 2.7.14, Pako 1.0.10, Plotly, Bootswatch-Themes slate/yeti, Open Sans über `@fontsource/open-sans`).
+- Der `EliteInsightsAdapter` ersetzt nach dem Erzeugen die URLs in der HTML (String-Ersetzung über eine Liste, ~9 Einträge). Kosten: das HTML liegt kurz im Speicher (wenige MB).
+- Ein Test erzeugt einen Bericht und scheitert, wenn die HTML noch einen Host außerhalb einer Erlaubnisliste enthält. Bringt ein EI-Update neue oder geänderte URLs, merkt man es sofort.
+- Strenge CSP für die Berichts-Origin: `default-src 'self'; script-src 'self' 'unsafe-inline'; style-src 'self' 'unsafe-inline'; connect-src 'self'; img-src 'self' data: https://render.guildwars2.com https://wiki.guildwars2.com https://i.imgur.com; font-src 'self'`. Das schützt zusätzlich gegen eingeschleustes Skript aus manipulierten Logs (4b): es kann nichts an fremde Server senden. Die Ersatzquellen (darthmaim, gw2dat, DuckDuckGo-Proxy) sind damit gesperrt und fallen aus der Datenschutzerklärung heraus.
+- Nebeneffekte: Berichte laden schneller (lange gecachte eigene Dateien, kein Fremd-DNS), ~6 MB mehr im Image.
+
+**Teil 2: Bilder (ArenaNet, imgur).** Bleiben extern (render.guildwars2.com, wiki.guildwars2.com, i.imgur.com), weil viele Symbole nur dort liegen. Weiter offen benennen. Wer sie auch loswerden will: Bild-Proxy mit Festplatten-Cache auf der Berichts-Origin (feste Erlaubnisliste gegen SSRF, mehr Traffic und Speicher, Nutzungsbedingungen von ArenaNet prüfen). Aufwand und Nutzen stehen aktuell nicht im Verhältnis.
+
+**Teil 3: Cloudflare vor `logs.`/`reports.breakbar.cc`.** Die Domain läuft über Cloudflare, voidlog ist dort als Proxy eingebunden. Für die neuen Subdomains: **DNS-only (graue Wolke)** empfohlen.
+- Cloudflare legt neue DNS-Einträge standardmäßig als Proxy (orange Wolke) an: aktiv auf DNS-only stellen.
+- Mit Proxy liefe jeder Upload (Spielernamen!) unverschlüsselt durch Cloudflare in den USA, Cloudflare wäre Empfänger und müsste wie bei voidlog in die Erklärung (mit Auftragsverarbeitungsvertrag).
+- Technische Folgen eines Proxys: Caddy sieht nur Cloudflare-Adressen, das Upload-Limit pro IP würde dann alle Nutzer über dieselben Randknoten zählen (echte IP aus `CF-Connecting-IP`, Caddy `trusted_proxies` mit Cloudflare-Bereichen); im kostenlosen Tarif sind Uploads auf 100 MB begrenzt (unser Limit: 200 MB); SSL-Modus „Full (strict)“ nötig.
+- Mit DNS-only entfallen diese Punkte, und Cloudflare ist nur noch DNS-Anbieter. Der Preis: kein Cloudflare-DDoS-Schutz. Bei diesem Datenvolumen akzeptabel (netcup bietet eigenen Basisschutz).
+- Wird DNS-only gewählt, steht in der Erklärung nur ein Satz: Domain wird über Cloudflare (DNS) verwaltet.
 
 ---
 
