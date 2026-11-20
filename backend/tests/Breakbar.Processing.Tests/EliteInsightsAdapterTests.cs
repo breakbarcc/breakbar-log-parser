@@ -108,8 +108,11 @@ public sealed class EliteInsightsAdapterTests : IDisposable
         // If this fails after an Elite Insights update, its footer changed: adjust ReportHtmlRewriter (docs/PLAN.md 4d).
         Assert.Contains("Generated with <a href=\"https://github.com/baaron4/GW2-Elite-Insights-Parser\"", html, StringComparison.Ordinal);
         Assert.Contains("<a href=\"https://logs.example.test\" target=\"_blank\" rel=\"noopener noreferrer\">breakbar.cc</a>", html, StringComparison.Ordinal);
-        // The tag sits in the footer, after EI's own last line.
-        Assert.True(html.IndexOf("Recorded by:", StringComparison.Ordinal) < html.IndexOf(">breakbar.cc</a>", StringComparison.Ordinal));
+        // The tag is part of the "Recorded by" line (same element), so the footer keeps its height.
+        int recorded = html.IndexOf("Recorded by:", StringComparison.Ordinal);
+        int tag = html.IndexOf(">breakbar.cc</a>", StringComparison.Ordinal);
+        int lineEnd = html.IndexOf("</div>", recorded, StringComparison.Ordinal);
+        Assert.True(recorded < tag && tag < lineEnd, "tag must sit between 'Recorded by' and the end of its element");
     }
 
     [Fact]

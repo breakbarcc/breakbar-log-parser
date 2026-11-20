@@ -42,15 +42,17 @@ public sealed class ReportHtmlRewriterTests
         "<div class=\"footer_bottom\">\n                Recorded by: {{ getLogData().recordedBy }} - {{ getLogData().recordedAccountBy }}\n            </div>";
 
     [Fact]
-    public void Footer_tag_is_added_below_the_recorded_by_line()
+    public void Footer_tag_is_appended_to_the_recorded_by_line()
     {
         string html = $"<div class=\"footer\">{Footer}</div>";
 
         string result = ReportHtmlRewriter.Rewrite(html, Base, "https://logs.example.test");
 
-        string tag = "<div class=\"footer_bottom\">Generated with <a href=\"https://github.com/baaron4/GW2-Elite-Insights-Parser\" target=\"_blank\" rel=\"noopener noreferrer\">Elite Insights</a>.<br>" +
-                     "<a href=\"https://logs.example.test\" target=\"_blank\" rel=\"noopener noreferrer\">breakbar.cc</a></div>";
-        Assert.Equal($"<div class=\"footer\">{Footer}\n            {tag}</div>", result);
+        string tag = " · Generated with <a href=\"https://github.com/baaron4/GW2-Elite-Insights-Parser\" target=\"_blank\" rel=\"noopener noreferrer\">Elite Insights</a>" +
+                     " · <a href=\"https://logs.example.test\" target=\"_blank\" rel=\"noopener noreferrer\">breakbar.cc</a>";
+        // Same element as "Recorded by": the tag goes right before its closing tag, no new block.
+        Assert.Equal($"<div class=\"footer\">{Footer.Insert(Footer.Length - "</div>".Length, tag)}</div>", result);
+        Assert.Single(System.Text.RegularExpressions.Regex.Matches(result, "footer_bottom"));
     }
 
     [Fact]

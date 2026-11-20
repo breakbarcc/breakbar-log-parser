@@ -32,8 +32,8 @@ public static class ReportHtmlRewriter
     }
 
     /// <summary>
-    /// Adds "Generated with Elite Insights. / breakbar.cc" below EI's "Recorded by" line, in the same style and
-    /// in the layout dps.report uses for its own tag.
+    /// Appends "· Generated with Elite Insights · breakbar.cc" to EI's "Recorded by" line. It stays on that one
+    /// line (wrapping only on narrow screens), so the footer does not get taller.
     /// </summary>
     private static string AddFooterTag(string html, string siteUrl)
     {
@@ -48,12 +48,11 @@ public static class ReportHtmlRewriter
         {
             return html;
         }
+        // Inserted just before the closing tag, i.e. inside the same footer_bottom element.
         string tag =
-            "\n            <div class=\"footer_bottom\">" +
-            $"Generated with <a href=\"{EliteInsightsUrl}\" target=\"_blank\" rel=\"noopener noreferrer\">Elite Insights</a>.<br>" +
-            $"<a href=\"{WebUtility.HtmlEncode(siteUrl)}\" target=\"_blank\" rel=\"noopener noreferrer\">{SiteName}</a>" +
-            "</div>";
-        return html.Insert(end + close.Length, tag);
+            $" · Generated with <a href=\"{EliteInsightsUrl}\" target=\"_blank\" rel=\"noopener noreferrer\">Elite Insights</a>" +
+            $" · <a href=\"{WebUtility.HtmlEncode(siteUrl)}\" target=\"_blank\" rel=\"noopener noreferrer\">{SiteName}</a>";
+        return html.Insert(end, tag);
     }
 
     /// <summary>
