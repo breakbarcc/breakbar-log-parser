@@ -6,7 +6,7 @@ import { REPORT_RETENTION_DAYS } from '../lib/retention'
 // Sie beschreibt, was die Anwendung tatsächlich tut (docs/PLAN.md 4b, 6a). Wer die Anwendung ändert
 // (neue Cookies, Dienste, Speicherdauer, Drittanbieter in den Berichten), muss diesen Text mitändern.
 
-const UPDATED = '18.11.2026'
+const UPDATED = '20.11.2026'
 
 function Section({ title, children }: { title: string; children: ReactNode }) {
   return (
@@ -62,9 +62,10 @@ export function PrivacyPage() {
 
       <Section title="Hosting und Verbindungsdaten">
         <P>
-          Die Anwendung läuft auf einem gemieteten virtuellen Server (VPS). Der Hosting-Anbieter verarbeitet als Auftragsverarbeiter die für den
-          Betrieb technisch notwendigen Verbindungsdaten, insbesondere deine IP-Adresse. Wir selbst schreiben keine Zugriffsprotokolle mit
-          IP-Adressen.
+          Die Anwendung läuft auf einem virtuellen Server (VPS), den der Betreiber bei der netcup GmbH, Emmy-Noether-Str. 10, 76131 Karlsruhe,
+          mietet. netcup verarbeitet als Auftragsverarbeiter die für den Betrieb technisch notwendigen Verbindungsdaten, insbesondere deine
+          IP-Adresse. Mit netcup besteht ein Vertrag zur Auftragsverarbeitung (Art. 28 DSGVO). Wir selbst schreiben keine Zugriffsprotokolle
+          mit IP-Adressen.
         </P>
         <P>
           Die IP-Adresse nutzt die Anwendung nur, um die Zahl der Uploads pro Minute zu begrenzen (Schutz vor Überlastung und Missbrauch).
