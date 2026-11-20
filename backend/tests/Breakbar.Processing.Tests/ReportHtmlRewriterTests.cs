@@ -49,7 +49,7 @@ public sealed class ReportHtmlRewriterTests
         string result = ReportHtmlRewriter.Rewrite(html, Base, "https://logs.example.test");
 
         string tag = "<div class=\"footer_bottom\">Generated with <a href=\"https://github.com/baaron4/GW2-Elite-Insights-Parser\" target=\"_blank\" rel=\"noopener noreferrer\">Elite Insights</a>.<br>" +
-                     "<a href=\"https://logs.example.test\" target=\"_blank\" rel=\"noopener noreferrer\">breakbar-logs</a></div>";
+                     "<a href=\"https://logs.example.test\" target=\"_blank\" rel=\"noopener noreferrer\">breakbar.cc</a></div>";
         Assert.Equal($"<div class=\"footer\">{Footer}\n            {tag}</div>", result);
     }
 
@@ -61,7 +61,7 @@ public sealed class ReportHtmlRewriterTests
         string result = ReportHtmlRewriter.Rewrite(html, Base, "https://logs.example.test/?a=1&b=\"2\"");
 
         Assert.Contains("href=\"https://logs.example.test/?a=1&amp;b=&quot;2&quot;\"", result, StringComparison.Ordinal);
-        Assert.Single(System.Text.RegularExpressions.Regex.Matches(result, "breakbar-logs</a>"));
+        Assert.Single(System.Text.RegularExpressions.Regex.Matches(result, "breakbar\\.cc</a>"));
         Assert.EndsWith("</div>';</script>", result, StringComparison.Ordinal);
     }
 

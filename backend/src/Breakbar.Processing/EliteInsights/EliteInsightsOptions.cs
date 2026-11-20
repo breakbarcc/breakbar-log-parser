@@ -23,7 +23,7 @@ public sealed class EliteInsightsOptions
     /// <summary>Self-hosted fonts for the report pages (shipped with the app), published into <c>AssetsDirectory/fonts</c> at startup.</summary>
     public string ReportFontsDirectory { get; init; } = Path.Combine(AppContext.BaseDirectory, "ReportFonts");
 
-    /// <summary>Public address of the site, e.g. "https://logs.breakbar.cc"; linked from the "Generated with Elite Insights" tag in the report footer. Null: no tag.</summary>
+    /// <summary>Link target of the "breakbar.cc" tag next to "Generated with Elite Insights" in the report footer, e.g. "https://breakbar.cc". Null: no tag.</summary>
     public string? SiteUrl { get; init; }
 
     public bool ParseCombatReplay { get; init; } = true;
