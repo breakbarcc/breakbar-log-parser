@@ -73,6 +73,29 @@ public sealed class EliteInsightsAdapterTests : IDisposable
     }
 
     [Fact]
+    public void Report_does_not_load_google_fonts_and_the_self_hosted_font_is_available()
+    {
+        string log = TestLogs.RequireSmallest();
+
+        var result = _adapter.Parse(log, Path.Combine(_workDir, "fonts-report"), TestContext.Current.CancellationToken);
+
+        Assert.True(result.Success, result.FailureReason);
+        string html = File.ReadAllText(result.HtmlPath!);
+        // If this fails after an Elite Insights update, its template changed: adjust ReportHtmlRewriter (docs/PLAN.md 4d).
+        Assert.DoesNotContain("fonts.googleapis.com", html, StringComparison.Ordinal);
+        Assert.DoesNotContain("fonts.gstatic.com", html, StringComparison.Ordinal);
+        Assert.Contains($"{AssetsBaseUrl}/fonts/open-sans.css", html, StringComparison.Ordinal);
+
+        // The stylesheet and every font file it refers to are published next to EI's JS/CSS.
+        string fonts = Path.Combine(_workDir, "ei-assets", "fonts");
+        string css = File.ReadAllText(Path.Combine(fonts, "open-sans.css"));
+        var files = System.Text.RegularExpressions.Regex.Matches(css, @"url\(([^)]+\.woff2)\)").Select(m => m.Groups[1].Value).ToList();
+        Assert.NotEmpty(files);
+        Assert.All(files, f => Assert.True(File.Exists(Path.Combine(fonts, f)), $"missing {f}"));
+        Assert.True(File.Exists(Path.Combine(fonts, "OFL.txt")), "font license must be shipped with the fonts");
+    }
+
+    [Fact]
     public void Cancelled_parse_throws_OperationCanceledException()
     {
         string log = TestLogs.RequireSmallest();

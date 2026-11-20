@@ -27,6 +27,7 @@ public sealed class EliteInsightsAdapter : IEliteInsightsParser
     {
         _options = options;
         Directory.CreateDirectory(options.AssetsDirectory);
+        PublishReportFonts(options);
 
         // Loaded once per process: the ~10 MB skill cache and the HTML templates.
         // This is the per-log startup cost the CLI pays on every run (docs/PLAN.md, section 2).
@@ -138,12 +139,35 @@ public sealed class EliteInsightsAdapter : IEliteInsightsParser
         {
             ExternalHTMLScripts = true,
             CompressJson = true,
+            // Keep the dark theme: the light theme (Bootswatch "yeti") imports Google Fonts from its own CSS,
+            // which would need self-hosting the Bootswatch CSS first (docs/PLAN.md 4d).
             HTMLLightTheme = false,
         };
-        using var stream = new FileStream(htmlPath, FileMode.Create, FileAccess.Write, FileShare.None, 64 * 1024);
-        using var writer = new StreamWriter(stream, Utf8NoBom);
         var builder = new HTMLBuilder(log, settings, _htmlAssets, EliteInsightsVersion, uploadResults);
-        builder.CreateHTML(writer, _options.AssetsDirectory);
+
+        // Buffer in memory (a few MB) so the HTML can be post-processed before it is written (ReportHtmlRewriter).
+        using var buffer = new MemoryStream(1 << 20);
+        using (var writer = new StreamWriter(buffer, Utf8NoBom, leaveOpen: true))
+        {
+            builder.CreateHTML(writer, _options.AssetsDirectory);
+        }
+        string html = ReportHtmlRewriter.Rewrite(Utf8NoBom.GetString(buffer.GetBuffer(), 0, (int)buffer.Length), _options.AssetsBaseUrl);
+        File.WriteAllText(htmlPath, html, Utf8NoBom);
+    }
+
+    /// <summary>Makes the self-hosted report fonts available next to EI's JS/CSS (served by the API under /ei-assets/fonts/).</summary>
+    private static void PublishReportFonts(EliteInsightsOptions options)
+    {
+        if (!Directory.Exists(options.ReportFontsDirectory))
+        {
+            throw new InvalidOperationException($"Report fonts not found in '{options.ReportFontsDirectory}'. The build output is incomplete.");
+        }
+        string target = Path.Combine(options.AssetsDirectory, "fonts");
+        Directory.CreateDirectory(target);
+        foreach (string file in Directory.EnumerateFiles(options.ReportFontsDirectory))
+        {
+            File.Copy(file, Path.Combine(target, Path.GetFileName(file)), overwrite: true);
+        }
     }
 
     private void WriteJsonGz(GW2EIEvtcParser.ParsedEvtcLog log, string jsonGzPath, UploadResults uploadResults)

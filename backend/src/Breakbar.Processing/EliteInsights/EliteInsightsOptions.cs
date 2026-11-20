@@ -20,6 +20,9 @@ public sealed class EliteInsightsOptions
     /// <summary>Directory holding EI's GW2 API caches (SkillList.json, SpecList.json, MapList.json).</summary>
     public string ApiCacheDirectory { get; init; } = Path.Combine(AppContext.BaseDirectory, "EliteInsightsContent");
 
+    /// <summary>Self-hosted fonts for the report pages (shipped with the app), published into <c>AssetsDirectory/fonts</c> at startup.</summary>
+    public string ReportFontsDirectory { get; init; } = Path.Combine(AppContext.BaseDirectory, "ReportFonts");
+
     public bool ParseCombatReplay { get; init; } = true;
 
     /// <summary>Logs shorter than this (ms) are rejected as "too short". EI default: 2200.</summary>
