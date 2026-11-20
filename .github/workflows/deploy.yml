@@ -1,0 +1,93 @@
+name: Deploy
+
+# Deploys to the VPS when the branch "prod" is pushed (promote with: git push origin main:prod).
+# Same pattern as voidlog: only pushes to prod, deliberately NOT pull_request. This repository is public, and a
+# pull request from a fork must never run with the VPS_SSH_KEY secret. Protect the branch "prod" and the
+# environment "prod" in the repository settings (only you may push/approve), see deploy/README.md.
+#
+# The image is built here, not on the VPS (2 vCPU shared with voidlog), and streamed to the VPS over SSH:
+# no container registry is involved.
+on:
+  push:
+    branches: [prod]
+
+permissions:
+  contents: read
+
+concurrency:
+  group: deploy
+  cancel-in-progress: false # never cancel a deployment halfway
+
+jobs:
+  test:
+    uses: ./.github/workflows/ci.yml
+
+  deploy:
+    needs: test
+    runs-on: ubuntu-latest
+    environment: prod
+    env:
+      IMAGE_TAG: ${{ github.sha }}
+      VPS_HOST: ${{ vars.VPS_HOST }}
+      VPS_USER: ${{ vars.VPS_USER || 'deploy' }}
+      VPS_PORT: ${{ vars.VPS_PORT || '22' }}
+      APP_DIR: ${{ vars.VPS_APP_DIR || '/srv/breakbar-logs' }}
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          submodules: true
+
+      - uses: docker/setup-buildx-action@v3
+
+      # Build and keep the image in the runner's local Docker (load), tagged with the commit and as latest.
+      - name: Build image
+        uses: docker/build-push-action@v6
+        with:
+          context: .
+          push: false
+          load: true
+          tags: |
+            breakbar-logs:${{ github.sha }}
+            breakbar-logs:latest
+          cache-from: type=gha
+          cache-to: type=gha,mode=max
+
+      - name: Configure SSH
+        env:
+          VPS_SSH_KEY: ${{ secrets.VPS_SSH_KEY }}
+          # Output of: ssh-keyscan -t ed25519 <host>   (pins the server; the key is not trusted blindly)
+          VPS_HOST_KEY: ${{ vars.VPS_HOST_KEY }}
+        run: |
+          test -n "$VPS_HOST" && test -n "$VPS_SSH_KEY" && test -n "$VPS_HOST_KEY" \
+            || { echo "::error::Set VPS_HOST, VPS_HOST_KEY (variables) and VPS_SSH_KEY (secret) in the environment 'prod'."; exit 1; }
+          install -m 700 -d ~/.ssh
+          printf '%s\n' "$VPS_SSH_KEY" > ~/.ssh/deploy_key
+          chmod 600 ~/.ssh/deploy_key
+          printf '%s\n' "$VPS_HOST_KEY" > ~/.ssh/known_hosts
+          cat > ~/.ssh/config <<EOF
+          Host vps
+            HostName $VPS_HOST
+            User $VPS_USER
+            Port $VPS_PORT
+            IdentityFile ~/.ssh/deploy_key
+            IdentitiesOnly yes
+            StrictHostKeyChecking yes
+            ServerAliveInterval 30
+          EOF
+
+      # docker save streams the layers; gzip shrinks the transfer to roughly a third.
+      - name: Transfer image
+        run: |
+          docker save "breakbar-logs:${IMAGE_TAG}" breakbar-logs:latest | gzip | ssh vps 'gunzip | docker load'
+
+      # Compose file, Caddy snippet and deploy script come from this commit; data/ and .env stay on the VPS.
+      - name: Copy deploy files
+        run: |
+          # shellcheck disable=SC2029 # APP_DIR is meant to be expanded here, on the runner
+          tar -C deploy -cf - docker-compose.yml logs.caddy deploy.sh \
+            | ssh vps "mkdir -p '$APP_DIR/deploy' && tar -C '$APP_DIR/deploy' -xf -"
+
+      - name: Start new version
+        run: |
+          # shellcheck disable=SC2029 # the values are meant to be expanded here, on the runner
+          ssh vps "IMAGE_TAG='$IMAGE_TAG' BREAKBAR_DIR='$APP_DIR' bash '$APP_DIR/deploy/deploy.sh'"

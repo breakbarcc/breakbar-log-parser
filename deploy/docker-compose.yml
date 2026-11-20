@@ -1,13 +1,16 @@
 # breakbar-logs on the VPS (docs/PLAN.md 6b, deploy/README.md).
-#   cd /srv/breakbar-logs && docker compose -f deploy/docker-compose.yml up -d
+# Normally started by deploy/deploy.sh (called from GitHub Actions, see .github/workflows/deploy.yml);
+# by hand: IMAGE_TAG=<commit sha> docker compose -f deploy/docker-compose.yml up -d
 # Caddy on the host terminates TLS for logs.breakbar.cc and reports.breakbar.cc and proxies to 127.0.0.1:4100.
 name: breakbar-logs
 
 services:
   app:
-    # Built and published by GitHub Actions; "build" is the fallback for building on the VPS itself
-    # (docker compose ... up -d --build). Building there costs several minutes of CPU next to voidlog.
-    image: ghcr.io/breakbarcc/breakbar-log-parser:latest
+    # The image is built in GitHub Actions and loaded onto the VPS over SSH (no registry, no build on the VPS).
+    # "pull_policy: never": a missing image must fail loudly instead of being searched on Docker Hub.
+    image: breakbar-logs:${IMAGE_TAG:-latest}
+    pull_policy: never
+    # Only for building locally (docker compose ... build); the VPS has no source code.
     build:
       context: ..
       dockerfile: Dockerfile
